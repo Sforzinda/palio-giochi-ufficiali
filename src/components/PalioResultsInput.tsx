@@ -1,5 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle, Clock, PlusCircle, Repeat, Save } from 'lucide-react';
+import { AlertCircle, CheckCircle, Clock, Eye, EyeOff, Flag, PlusCircle, Repeat, RotateCcw, Save, Send } from 'lucide-react';
 import { getSupabaseClient } from '../config';
 import { PalioAuthGate } from './PalioAuthGate';
 import {
@@ -7,6 +7,7 @@ import {
   type PalioEdition,
   type PalioEditionHeat,
   type PalioGame,
+  type PalioLiveControl,
   palioGameLabels as liveGameLabels,
 } from '../hooks/usePalioLiveData';
 import {
@@ -61,6 +62,11 @@ function PalioResultsInputContent() {
   const [heats, setHeats] = useState<PalioEditionHeat[]>([]);
   const [heatGame, setHeatGame] = useState<PalioGame>('corsa');
   const [heatSize, setHeatSize] = useState('3');
+  const [liveControls, setLiveControls] = useState<PalioLiveControl[]>([]);
+  const [liveTitleInput, setLiveTitleInput] = useState('');
+  const [tripliceWinnerId, setTripliceWinnerId] = useState('');
+  const [savingLiveField, setSavingLiveField] = useState<string | null>(null);
+  const [regiaStatusMessage, setRegiaStatusMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingHeats, setSavingHeats] = useState(false);
@@ -100,6 +106,18 @@ function PalioResultsInputContent() {
     setHeats((data as PalioEditionHeat[]) ?? []);
   }, [supabase]);
 
+  const fetchLiveControls = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('palio_live_controls')
+      .select('id, edition_id, is_active, live_title, show_heats, show_games, show_partial_ranking, show_total_ranking, triplice_winner_contrada_id, draw_revealed_count');
+    if (error) {
+      console.error('Error fetching palio live controls:', error);
+      setLiveControls([]);
+      return;
+    }
+    setLiveControls((data as PalioLiveControl[]) ?? []);
+  }, [supabase]);
+
   const fetchEditionResults = useCallback(async (editionId: string) => {
     if (!editionId) {
       setEditionResults([]);
@@ -123,11 +141,11 @@ function PalioResultsInputContent() {
       const { data: contradeData, error: contradeError } = await supabase.from('contrade').select('id, name').order('name');
       if (contradeError) console.error('Error fetching contrade:', contradeError);
       setContrade((contradeData as Contrada[]) ?? []);
-      await fetchEditions();
+      await Promise.all([fetchEditions(), fetchLiveControls()]);
       setLoading(false);
     }
     loadInitialData();
-  }, [fetchEditions, supabase]);
+  }, [fetchEditions, fetchLiveControls, supabase]);
 
   useEffect(() => {
     fetchEditionResults(selectedEditionId);
@@ -152,6 +170,32 @@ function PalioResultsInputContent() {
   // batterie (si segna "senza giocatori" direttamente sui risultati) e la
   // finale usa sempre le prime 3 classificate, senza estrazione.
   const availableHeatGames: PalioGame[] = availableGames.filter((g) => g !== 'melocotogno' && g !== 'finale');
+
+  const selectedLiveControl = useMemo(
+    () => liveControls.find((control) => control.edition_id === selectedEditionId) ?? null,
+    [liveControls, selectedEditionId]
+  );
+  const activeLiveControl = useMemo(
+    () => liveControls.find((control) => control.is_active) ?? null,
+    [liveControls]
+  );
+  const drawableHeatCount = useMemo(
+    () => heats.filter((heat) => heat.game !== 'melocotogno' && heat.game !== 'finale').length,
+    [heats]
+  );
+  const revealedDrawCount = Math.min(Math.max(selectedLiveControl?.draw_revealed_count ?? 0, 0), drawableHeatCount);
+
+  // Se non è ancora selezionata un'edizione, precompila con quella
+  // attualmente in diretta (se c'è).
+  useEffect(() => {
+    if (selectedEditionId || !activeLiveControl) return;
+    setSelectedEditionId(activeLiveControl.edition_id);
+  }, [activeLiveControl, selectedEditionId]);
+
+  useEffect(() => {
+    setLiveTitleInput(selectedLiveControl?.live_title ?? '');
+    setTripliceWinnerId(selectedLiveControl?.triplice_winner_contrada_id ?? '');
+  }, [selectedLiveControl]);
 
   useEffect(() => {
     if (!availableGames.includes(game)) {
@@ -433,6 +477,202 @@ function PalioResultsInputContent() {
     }
   }
 
+  // ---- Regia diretta pubblica (palio_live_controls) ----
+
+  async function handleToggleLiveActive() {
+    if (!selectedEditionId) {
+      setRegiaStatusMessage("Seleziona prima un'edizione");
+      return;
+    }
+
+    setSavingLiveField('is_active');
+    try {
+      if (selectedLiveControl?.is_active) {
+        const { error } = await supabase
+          .from('palio_live_controls')
+          .update({ is_active: false })
+          .eq('id', selectedLiveControl.id);
+        if (error) {
+          setRegiaStatusMessage(`Errore disattivazione diretta: ${error.message}`);
+          return;
+        }
+        await fetchLiveControls();
+        setRegiaStatusMessage('Diretta disattivata');
+        return;
+      }
+
+      const { error: disableError } = await supabase
+        .from('palio_live_controls')
+        .update({ is_active: false })
+        .eq('is_active', true);
+      if (disableError) {
+        setRegiaStatusMessage(`Errore aggiornamento diretta: ${disableError.message}`);
+        return;
+      }
+
+      const { error } = await supabase
+        .from('palio_live_controls')
+        .upsert({
+          edition_id: selectedEditionId,
+          is_active: true,
+          live_title: selectedLiveControl?.live_title ?? null,
+          show_heats: selectedLiveControl?.show_heats ?? false,
+          show_games: selectedLiveControl?.show_games ?? true,
+          show_partial_ranking: selectedLiveControl?.show_partial_ranking ?? true,
+          show_total_ranking: selectedLiveControl?.show_total_ranking ?? true,
+          triplice_winner_contrada_id: selectedLiveControl?.triplice_winner_contrada_id ?? null,
+          draw_revealed_count: selectedLiveControl?.draw_revealed_count ?? 0,
+        }, { onConflict: 'edition_id' });
+      if (error) {
+        setRegiaStatusMessage(`Errore attivazione diretta: ${error.message}`);
+        return;
+      }
+      await fetchLiveControls();
+      setRegiaStatusMessage('Diretta aggiornata');
+    } finally {
+      setSavingLiveField(null);
+    }
+  }
+
+  async function handleToggleLiveSection(
+    field: keyof Pick<PalioLiveControl, 'show_heats' | 'show_games' | 'show_partial_ranking' | 'show_total_ranking'>
+  ) {
+    if (!selectedEditionId) {
+      setRegiaStatusMessage("Seleziona prima un'edizione");
+      return;
+    }
+
+    const nextValue = !(selectedLiveControl?.[field] ?? true);
+    setSavingLiveField(field);
+    try {
+      const { error } = await supabase
+        .from('palio_live_controls')
+        .upsert({
+          edition_id: selectedEditionId,
+          is_active: selectedLiveControl?.is_active ?? false,
+          live_title: selectedLiveControl?.live_title ?? null,
+          show_heats: field === 'show_heats' ? nextValue : selectedLiveControl?.show_heats ?? false,
+          show_games: field === 'show_games' ? nextValue : selectedLiveControl?.show_games ?? true,
+          show_partial_ranking: field === 'show_partial_ranking' ? nextValue : selectedLiveControl?.show_partial_ranking ?? true,
+          show_total_ranking: field === 'show_total_ranking' ? nextValue : selectedLiveControl?.show_total_ranking ?? true,
+          triplice_winner_contrada_id: selectedLiveControl?.triplice_winner_contrada_id ?? null,
+          draw_revealed_count: selectedLiveControl?.draw_revealed_count ?? 0,
+        }, { onConflict: 'edition_id' });
+      if (error) {
+        setRegiaStatusMessage(`Errore aggiornamento sezione: ${error.message}`);
+        return;
+      }
+      await fetchLiveControls();
+    } finally {
+      setSavingLiveField(null);
+    }
+  }
+
+  async function handleSaveLiveTitle() {
+    if (!selectedEditionId) {
+      setRegiaStatusMessage("Seleziona prima un'edizione");
+      return;
+    }
+
+    setSavingLiveField('live_title');
+    try {
+      const normalizedTitle = liveTitleInput.trim();
+      const { error } = await supabase
+        .from('palio_live_controls')
+        .upsert({
+          edition_id: selectedEditionId,
+          is_active: selectedLiveControl?.is_active ?? false,
+          live_title: normalizedTitle || null,
+          show_heats: selectedLiveControl?.show_heats ?? false,
+          show_games: selectedLiveControl?.show_games ?? true,
+          show_partial_ranking: selectedLiveControl?.show_partial_ranking ?? true,
+          show_total_ranking: selectedLiveControl?.show_total_ranking ?? true,
+          triplice_winner_contrada_id: selectedLiveControl?.triplice_winner_contrada_id ?? null,
+          draw_revealed_count: selectedLiveControl?.draw_revealed_count ?? 0,
+        }, { onConflict: 'edition_id' });
+      if (error) {
+        setRegiaStatusMessage(`Errore salvataggio titolo diretta: ${error.message}`);
+        return;
+      }
+      await fetchLiveControls();
+      setRegiaStatusMessage('Titolo diretta aggiornato');
+    } finally {
+      setSavingLiveField(null);
+    }
+  }
+
+  async function handleSaveTripliceWinner() {
+    if (!selectedEditionId) {
+      setRegiaStatusMessage("Seleziona prima un'edizione");
+      return;
+    }
+
+    const normalizedWinnerId = tripliceWinnerId || null;
+    setSavingLiveField('triplice_winner');
+    try {
+      const { error } = await supabase
+        .from('palio_live_controls')
+        .upsert({
+          edition_id: selectedEditionId,
+          is_active: selectedLiveControl?.is_active ?? false,
+          live_title: selectedLiveControl?.live_title ?? null,
+          show_heats: selectedLiveControl?.show_heats ?? false,
+          show_games: selectedLiveControl?.show_games ?? true,
+          show_partial_ranking: selectedLiveControl?.show_partial_ranking ?? true,
+          show_total_ranking: selectedLiveControl?.show_total_ranking ?? true,
+          triplice_winner_contrada_id: normalizedWinnerId,
+          draw_revealed_count: selectedLiveControl?.draw_revealed_count ?? 0,
+        }, { onConflict: 'edition_id' });
+      if (error) {
+        setRegiaStatusMessage(`Errore salvataggio vincitore Triplice Tenzone: ${error.message}`);
+        return;
+      }
+      await fetchLiveControls();
+      setRegiaStatusMessage(normalizedWinnerId ? 'Vincitore Triplice Tenzone confermato' : 'Vincitore Triplice Tenzone rimosso');
+    } finally {
+      setSavingLiveField(null);
+    }
+  }
+
+  async function handleSetDrawRevealedCount(nextCount: number) {
+    if (!selectedEditionId) {
+      setRegiaStatusMessage("Seleziona prima un'edizione");
+      return;
+    }
+
+    const normalizedCount = Math.min(Math.max(nextCount, 0), drawableHeatCount);
+    setSavingLiveField('draw_revealed_count');
+    try {
+      const { error } = await supabase
+        .from('palio_live_controls')
+        .upsert({
+          edition_id: selectedEditionId,
+          is_active: selectedLiveControl?.is_active ?? false,
+          live_title: selectedLiveControl?.live_title ?? null,
+          show_heats: selectedLiveControl?.show_heats ?? false,
+          show_games: selectedLiveControl?.show_games ?? true,
+          show_partial_ranking: selectedLiveControl?.show_partial_ranking ?? true,
+          show_total_ranking: selectedLiveControl?.show_total_ranking ?? true,
+          triplice_winner_contrada_id: selectedLiveControl?.triplice_winner_contrada_id ?? null,
+          draw_revealed_count: normalizedCount,
+        }, { onConflict: 'edition_id' });
+      if (error) {
+        setRegiaStatusMessage(`Errore aggiornamento estrazioni: ${error.message}`);
+        return;
+      }
+      await fetchLiveControls();
+      setRegiaStatusMessage(
+        normalizedCount === 0
+          ? 'Estrazioni resettate'
+          : normalizedCount >= drawableHeatCount
+            ? 'Tutte le estrazioni inviate'
+            : `Estrazione ${normalizedCount}/${drawableHeatCount} inviata`
+      );
+    } finally {
+      setSavingLiveField(null);
+    }
+  }
+
   // ---- Gestione batterie (corsa/carriola/cerchio/torre) ----
 
   const heatEligibleContrade = contrade;
@@ -681,6 +921,163 @@ function PalioResultsInputContent() {
             Crea edizione
           </button>
         )}
+      </div>
+
+      {/* ---- Regia diretta pubblica ---- */}
+      <div className="mt-6 rounded-lg border border-amber-800/50 bg-amber-950/20 p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-amber-300">Regia diretta pubblica</h2>
+            <p className="mt-1 text-sm text-amber-100/70">
+              Decide cosa mostrare su /estrazioni e /risultati per l&apos;edizione selezionata.
+            </p>
+          </div>
+          <div className={`rounded-md px-3 py-2 text-sm font-semibold ${activeLiveControl ? 'bg-emerald-950/40 text-emerald-300' : 'bg-stone-800 text-stone-400'}`}>
+            {activeLiveControl
+              ? `Diretta attiva: ${formatPalioEditionLabel(editions.find((edition) => edition.id === activeLiveControl.edition_id) ?? nextEdition)}`
+              : 'Diretta non attiva'}
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            disabled={!selectedEditionId || savingLiveField === 'is_active'}
+            onClick={handleToggleLiveActive}
+            className={`inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition disabled:opacity-50 ${
+              selectedLiveControl?.is_active ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-emerald-600 text-white hover:bg-emerald-700'
+            }`}
+          >
+            {selectedLiveControl?.is_active ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            {selectedLiveControl?.is_active ? 'Disattiva diretta' : 'Attiva questa edizione'}
+          </button>
+        </div>
+
+        <form
+          onSubmit={(e) => { e.preventDefault(); handleSaveLiveTitle(); }}
+          className="mt-4 flex flex-wrap items-end gap-3"
+        >
+          <label className="text-sm font-semibold text-stone-300">
+            Nome mostrato nella diretta
+            <input
+              type="text"
+              value={liveTitleInput}
+              onChange={(e) => setLiveTitleInput(e.target.value)}
+              placeholder={selectedEdition ? formatPalioEditionLabel(selectedEdition) : 'Es. Palio di Ottobre 2026'}
+              className="ml-2 rounded-md border border-stone-700 bg-stone-800 px-3 py-1.5 text-sm text-stone-100"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={!selectedEditionId || savingLiveField === 'live_title'}
+            className="inline-flex items-center gap-1.5 rounded-md bg-palio-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-palio-600 disabled:opacity-50"
+          >
+            <Save className="h-4 w-4" />
+            Salva nome
+          </button>
+        </form>
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {([
+            { field: 'show_heats' as const, label: 'Batterie' },
+            { field: 'show_games' as const, label: 'Risultati prove' },
+            { field: 'show_partial_ranking' as const, label: 'Classifica parziale' },
+            { field: 'show_total_ranking' as const, label: 'Classifica finale' },
+          ]).map(({ field, label }) => {
+            const isVisible = selectedLiveControl?.[field] ?? (field === 'show_heats' ? false : true);
+            return (
+              <button
+                key={field}
+                type="button"
+                disabled={!selectedEditionId || savingLiveField === field}
+                onClick={() => handleToggleLiveSection(field)}
+                className="flex items-center justify-between rounded-md border border-stone-700 bg-stone-900 px-3 py-2 text-sm font-medium text-stone-200 transition hover:border-amber-500 disabled:opacity-50"
+              >
+                {label}
+                {isVisible ? <Eye className="h-4 w-4 text-emerald-400" /> : <EyeOff className="h-4 w-4 text-stone-500" />}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-5 rounded-md border border-blue-900/60 bg-blue-950/20 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-blue-300">
+                <Send className="h-4 w-4" />
+                Regia estrazioni
+              </h3>
+              <p className="mt-1 text-sm font-semibold text-blue-100">Inviate {revealedDrawCount}/{drawableHeatCount} estrazioni</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={!selectedEditionId || savingLiveField === 'draw_revealed_count' || drawableHeatCount === 0}
+                onClick={() => handleSetDrawRevealedCount(0)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-blue-700 px-3 py-1.5 text-sm font-semibold text-blue-200 hover:border-blue-400 disabled:opacity-50"
+              >
+                <RotateCcw className="h-4 w-4" />
+                Reset
+              </button>
+              <button
+                type="button"
+                disabled={!selectedEditionId || savingLiveField === 'draw_revealed_count' || drawableHeatCount === 0 || revealedDrawCount >= drawableHeatCount}
+                onClick={() => handleSetDrawRevealedCount(revealedDrawCount + 1)}
+                className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                <Send className="h-4 w-4" />
+                Invia prossima
+              </button>
+              <button
+                type="button"
+                disabled={!selectedEditionId || savingLiveField === 'draw_revealed_count' || drawableHeatCount === 0}
+                onClick={() => handleSetDrawRevealedCount(drawableHeatCount)}
+                className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                <Flag className="h-4 w-4" />
+                Invia tutte
+              </button>
+            </div>
+          </div>
+          {drawableHeatCount === 0 && (
+            <p className="mt-3 text-sm text-blue-100/70">
+              Nessuna batteria estratta per Corsa/Carriole/Cerchio/Torre. Melocotogno e Triplice Tenzone non vengono inviate qui.
+            </p>
+          )}
+        </div>
+
+        {currentMonth === 'ottobre' && (
+          <form
+            onSubmit={(e) => { e.preventDefault(); handleSaveTripliceWinner(); }}
+            className="mt-4 flex flex-wrap items-end gap-3 rounded-md border border-yellow-800/50 bg-yellow-950/20 p-4"
+          >
+            <label className="text-sm font-semibold text-stone-300">
+              Vincitore Triplice Tenzone
+              <select
+                value={tripliceWinnerId}
+                onChange={(e) => setTripliceWinnerId(e.target.value)}
+                className="ml-2 rounded-md border border-stone-700 bg-stone-800 px-3 py-1.5 text-sm text-stone-100"
+              >
+                <option value="">Non decretato</option>
+                {finalists.map((item) => (
+                  <option key={item.contradaId} value={item.contradaId}>
+                    {contrade.find((c) => c.id === item.contradaId)?.name ?? item.contradaId}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="submit"
+              disabled={!selectedEditionId || savingLiveField === 'triplice_winner'}
+              className="inline-flex items-center gap-1.5 rounded-md bg-yellow-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-yellow-700 disabled:opacity-50"
+            >
+              <Save className="h-4 w-4" />
+              Conferma
+            </button>
+          </form>
+        )}
+
+        {regiaStatusMessage && <p className="mt-3 text-sm font-semibold text-amber-300">{regiaStatusMessage}</p>}
       </div>
 
       {/* ---- Batterie di partenza ---- */}
