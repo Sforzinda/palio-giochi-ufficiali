@@ -346,20 +346,23 @@ function PalioTotalSummary({
                           Batteria {heatGroup.heatNumber}
                         </div>
                       </div>
-                      <div className="mt-1.5 space-y-1">
+                      <div className="mt-1.5 flex flex-1 flex-col gap-1">
                         {heatGroup.items.map((step) => {
                           const stemma = getContradaStemma(step.contrada?.name);
 
                           return (
-                          <div key={step.stepKey} className="grid grid-cols-[18px_minmax(0,1fr)] items-center gap-1.5 rounded-lg bg-amber-50/8 px-1.5 py-1">
-                            <span className="text-xs font-black text-amber-200">{step.displayOrder}</span>
-                            <span className="flex min-w-0 items-center gap-1">
-                              {stemma && (
-                                <img src={stemma} alt="" className="h-4 w-4 shrink-0 rounded-full object-cover ring-1 ring-amber-200/30" />
-                              )}
-                              <span className="truncate text-[11px] font-black text-amber-50 sm:text-xs">
-                                {step.contrada?.name ?? 'Contrada'}
-                              </span>
+                          <div
+                            key={step.stepKey}
+                            className="flex flex-1 items-center gap-2 overflow-hidden rounded-lg bg-amber-50/8 bg-cover bg-center px-2"
+                            style={
+                              stemma
+                                ? { backgroundImage: `linear-gradient(90deg, rgba(9,6,4,.82), rgba(9,6,4,.4)), url(${stemma})` }
+                                : undefined
+                            }
+                          >
+                            <span className="shrink-0 text-base font-black text-amber-200 sm:text-lg">{step.displayOrder}</span>
+                            <span className="min-w-0 truncate text-lg font-black leading-tight text-amber-50 sm:text-xl lg:text-2xl">
+                              {step.contrada?.name ?? 'Contrada'}
                             </span>
                           </div>
                           );
