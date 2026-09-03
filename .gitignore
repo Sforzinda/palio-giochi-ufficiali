@@ -1,2 +1,7 @@
 node_modules
 .DS_Store
+
+# Il .gitignore_global dell'utente ignora ogni cartella "lib/" (regola Python
+# ereditata). Qui serve invece per codice sorgente: la ri-includiamo.
+!src/lib/
+!src/lib/**
