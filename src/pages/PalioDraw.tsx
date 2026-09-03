@@ -135,7 +135,7 @@ function PalioGameSummary({
   const heatGroups = groupStepsByHeat(group.steps);
 
   return (
-    <section className="relative min-h-[72vh] overflow-hidden rounded-[2rem] border border-amber-100/28 bg-black/30 p-5 shadow-2xl shadow-black/40 lg:col-span-2 lg:p-8">
+    <section className="relative flex min-h-[72vh] flex-col overflow-hidden rounded-[2rem] border border-amber-100/28 bg-black/30 p-5 shadow-2xl shadow-black/40 lg:col-span-2 lg:min-h-0 lg:p-8">
       <div
         className="absolute inset-0 opacity-95"
         style={{
@@ -143,7 +143,7 @@ function PalioGameSummary({
         }}
       />
       <div className="pointer-events-none absolute inset-0 opacity-25 [background-image:linear-gradient(90deg,rgba(255,237,213,.16)_1px,transparent_1px),linear-gradient(rgba(255,237,213,.12)_1px,transparent_1px)] [background-size:46px_46px]" />
-      <div className="relative z-10 flex min-h-[calc(72vh-4rem)] flex-col">
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="text-xs font-black uppercase tracking-[0.32em] text-amber-100/62">
@@ -162,42 +162,44 @@ function PalioGameSummary({
           </div>
         </div>
 
-        <div className="mt-8 grid flex-1 gap-4 lg:grid-cols-4">
-          {heatGroups.map((heatGroup) => (
-            <div
-              key={heatGroup.heatNumber}
-              className="rounded-[1.5rem] border border-amber-100/24 bg-[#f6ead2] p-4 text-[#2a1309] shadow-2xl shadow-black/30"
-            >
-              <div className="border-b border-[#2a1309]/12 pb-3">
-                <div className="text-xs font-black uppercase tracking-[0.26em] text-[#92400e]">Batteria</div>
-                <h3 className="mt-1 text-4xl font-black leading-none">{heatGroup.heatNumber}</h3>
-              </div>
-              <div className="mt-4 space-y-3">
-                {heatGroup.items.map((step) => {
-                  const stemma = getContradaStemma(step.contrada?.name);
+        <div className="mt-8 min-h-0 flex-1 overflow-y-auto pr-1">
+          <div className="grid gap-4 lg:grid-cols-4">
+            {heatGroups.map((heatGroup) => (
+              <div
+                key={heatGroup.heatNumber}
+                className="rounded-[1.5rem] border border-amber-100/24 bg-[#f6ead2] p-4 text-[#2a1309] shadow-2xl shadow-black/30"
+              >
+                <div className="border-b border-[#2a1309]/12 pb-3">
+                  <div className="text-xs font-black uppercase tracking-[0.26em] text-[#92400e]">Batteria</div>
+                  <h3 className="mt-1 text-4xl font-black leading-none">{heatGroup.heatNumber}</h3>
+                </div>
+                <div className="mt-4 space-y-3">
+                  {heatGroup.items.map((step) => {
+                    const stemma = getContradaStemma(step.contrada?.name);
 
-                  return (
-                  <div key={step.stepKey} className="grid grid-cols-[42px_minmax(0,1fr)] items-center gap-3 rounded-2xl bg-[#2a1309]/8 px-3 py-2">
-                    <span className="grid h-10 w-10 place-items-center rounded-full bg-[#2a1309] text-lg font-black text-amber-100">
-                      {step.displayOrder}
-                    </span>
-                    <div className="flex min-w-0 items-center gap-2">
-                      {stemma && (
-                        <img src={stemma} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-[#2a1309]/20" />
-                      )}
-                      <div className="min-w-0">
-                        <div className="truncate text-xl font-black leading-tight">{step.contrada?.name ?? 'Contrada'}</div>
-                        {step.isUnavailable && (
-                          <div className="mt-0.5 text-xs font-black uppercase tracking-[0.18em] text-red-700">N.A.</div>
+                    return (
+                    <div key={step.stepKey} className="grid grid-cols-[42px_minmax(0,1fr)] items-center gap-3 rounded-2xl bg-[#2a1309]/8 px-3 py-2">
+                      <span className="grid h-10 w-10 place-items-center rounded-full bg-[#2a1309] text-lg font-black text-amber-100">
+                        {step.displayOrder}
+                      </span>
+                      <div className="flex min-w-0 items-center gap-2">
+                        {stemma && (
+                          <img src={stemma} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-[#2a1309]/20" />
                         )}
+                        <div className="min-w-0">
+                          <div className="truncate text-xl font-black leading-tight">{step.contrada?.name ?? 'Contrada'}</div>
+                          {step.isUnavailable && (
+                            <div className="mt-0.5 text-xs font-black uppercase tracking-[0.18em] text-red-700">N.A.</div>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
 
         {isTotalPending && (
@@ -239,7 +241,7 @@ function PalioTotalSummary({
   const heatGroups = activeGroup ? groupStepsByHeat(activeGroup.steps) : [];
 
   return (
-    <section className="relative flex min-h-[72vh] flex-col overflow-hidden rounded-[2rem] border border-amber-100/30 bg-black/30 p-5 shadow-2xl shadow-black/40 lg:col-span-2 lg:p-8">
+    <section className="relative flex min-h-[72vh] flex-col overflow-hidden rounded-[2rem] border border-amber-100/30 bg-black/30 p-5 shadow-2xl shadow-black/40 lg:col-span-2 lg:min-h-0 lg:p-8">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(254,215,170,.34),transparent_30%),linear-gradient(135deg,#3b1608,#160b06_58%,#090604)]" />
       <div className="pointer-events-none absolute inset-0 opacity-25 [background-image:linear-gradient(90deg,rgba(255,237,213,.16)_1px,transparent_1px),linear-gradient(rgba(255,237,213,.12)_1px,transparent_1px)] [background-size:42px_42px]" />
       <div className="relative z-10 flex min-h-0 flex-1 flex-col">
@@ -305,11 +307,11 @@ function PalioTotalSummary({
             : ''}
         </div>
 
-        <div className="mt-5 flex min-h-0 flex-1 items-center">
+        <div className="mt-5 flex min-h-0 flex-1 flex-col">
           {activeGroup ? (
             <div
               key={activeGroup.game}
-              className="w-full rounded-[1.5rem] border border-amber-100/24 bg-amber-50/10 p-4 shadow-2xl shadow-black/24 sm:p-5"
+              className="flex min-h-0 w-full flex-1 flex-col rounded-[1.5rem] border border-amber-100/24 bg-amber-50/10 p-4 shadow-2xl shadow-black/24 sm:p-5"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -322,35 +324,37 @@ function PalioTotalSummary({
                 </div>
               </div>
 
-              <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                {heatGroups.map((heatGroup) => (
-                  <div key={heatGroup.heatNumber} className="rounded-2xl border border-amber-100/16 bg-black/24 p-3">
-                    <div className="border-b border-amber-100/10 pb-2">
-                      <div className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-100/52">
-                        Batteria {heatGroup.heatNumber}
+              <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {heatGroups.map((heatGroup) => (
+                    <div key={heatGroup.heatNumber} className="rounded-2xl border border-amber-100/16 bg-black/24 p-3">
+                      <div className="border-b border-amber-100/10 pb-2">
+                        <div className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-100/52">
+                          Batteria {heatGroup.heatNumber}
+                        </div>
+                      </div>
+                      <div className="mt-3 space-y-1.5">
+                        {heatGroup.items.map((step) => {
+                          const stemma = getContradaStemma(step.contrada?.name);
+
+                          return (
+                          <div key={step.stepKey} className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-2 rounded-xl bg-amber-50/8 px-2 py-1.5">
+                            <span className="text-sm font-black text-amber-200">{step.displayOrder}</span>
+                            <span className="flex min-w-0 items-center gap-1.5">
+                              {stemma && (
+                                <img src={stemma} alt="" className="h-5 w-5 shrink-0 rounded-full object-cover ring-1 ring-amber-200/30" />
+                              )}
+                              <span className="truncate text-sm font-black text-amber-50 sm:text-base">
+                                {step.contrada?.name ?? 'Contrada'}
+                              </span>
+                            </span>
+                          </div>
+                          );
+                        })}
                       </div>
                     </div>
-                    <div className="mt-3 space-y-1.5">
-                      {heatGroup.items.map((step) => {
-                        const stemma = getContradaStemma(step.contrada?.name);
-
-                        return (
-                        <div key={step.stepKey} className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-2 rounded-xl bg-amber-50/8 px-2 py-1.5">
-                          <span className="text-sm font-black text-amber-200">{step.displayOrder}</span>
-                          <span className="flex min-w-0 items-center gap-1.5">
-                            {stemma && (
-                              <img src={stemma} alt="" className="h-5 w-5 shrink-0 rounded-full object-cover ring-1 ring-amber-200/30" />
-                            )}
-                            <span className="truncate text-sm font-black text-amber-50 sm:text-base">
-                              {step.contrada?.name ?? 'Contrada'}
-                            </span>
-                          </span>
-                        </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           ) : (
@@ -942,7 +946,7 @@ export function PalioDraw() {
           </div>
         </header>
 
-        <main className="relative z-10 mt-6 grid w-full gap-5 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1.1fr)_minmax(400px,0.9fr)]">
+        <main className="relative z-10 mt-6 grid w-full gap-5 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1.1fr)_minmax(400px,0.9fr)] lg:grid-rows-[minmax(0,1fr)]">
           {loading ? (
             <section className="flex min-h-[72vh] items-center justify-center rounded-[2rem] border border-amber-100/20 bg-black/28 text-xl font-black text-amber-100">
               Caricamento estrazioni...
