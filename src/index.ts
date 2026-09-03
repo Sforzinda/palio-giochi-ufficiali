@@ -27,3 +27,8 @@ export { PalioDraw } from './pages/PalioDraw'
 export { PalioLive } from './pages/PalioLive'
 export { PalioLiveMobile } from './pages/PalioLiveMobile'
 export { PalioWinnerCelebration } from './components/PalioWinnerCelebration'
+
+export { usePalioAuth } from './hooks/usePalioAuth'
+export type { PalioAuthState, PalioAuthStatus } from './hooks/usePalioAuth'
+export { PalioAuthGate } from './components/PalioAuthGate'
+export { PalioResultsInput } from './components/PalioResultsInput'
