@@ -1,0 +1,104 @@
+/*
+ * Stili richiesti da <PalioDraw />. Vanno importati una volta nel CSS globale
+ * dell'app consumatrice (es. `import '@sforzinda/palio-giochi-ufficiali/src/styles/palio-draw.css'`
+ * oppure copiati nel foglio globale se il bundler non risolve import CSS da submodule).
+ * Porting 1:1 dalle classi fp-draw-* di fantapalio/src/index.css.
+ */
+
+@keyframes fp-draw-background-pan {
+  0% {
+    background-position: 0% 40%;
+  }
+  50% {
+    background-position: 100% 60%;
+  }
+  100% {
+    background-position: 0% 40%;
+  }
+}
+
+@keyframes fp-draw-orb-float-one {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(36px, 28px, 0) scale(1.08);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes fp-draw-orb-float-two {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(-42px, -22px, 0) scale(1.06);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes fp-draw-light-sweep {
+  0% {
+    opacity: 0.35;
+    transform: translateY(0) scaleX(0.82);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(5px) scaleX(1);
+  }
+  100% {
+    opacity: 0.35;
+    transform: translateY(0) scaleX(0.82);
+  }
+}
+
+@keyframes fp-draw-reveal-card {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 28px, 0) rotateX(12deg) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) rotateX(0) scale(1);
+  }
+}
+
+.fp-draw-stage {
+  background-image:
+    radial-gradient(circle at 22% 18%, rgba(245, 158, 11, 0.3) 0, transparent 28%),
+    radial-gradient(circle at 78% 22%, rgba(132, 204, 22, 0.16) 0, transparent 26%),
+    radial-gradient(circle at 56% 82%, rgba(194, 65, 12, 0.28) 0, transparent 34%),
+    linear-gradient(118deg, #160b06 0%, #351407 45%, #1b1008 100%);
+  background-size: 145% 145%;
+  animation: fp-draw-background-pan 18s ease-in-out infinite;
+}
+
+.fp-draw-veil {
+  opacity: 0.28;
+  background-image:
+    linear-gradient(90deg, rgba(255, 237, 213, 0.16) 1px, transparent 1px),
+    linear-gradient(rgba(255, 237, 213, 0.12) 1px, transparent 1px);
+  background-size: 34px 34px;
+  mask-image: radial-gradient(circle at 50% 40%, black, transparent 78%);
+}
+
+.fp-draw-orb-one {
+  animation: fp-draw-orb-float-one 13s ease-in-out infinite;
+}
+
+.fp-draw-orb-two {
+  animation: fp-draw-orb-float-two 15s ease-in-out infinite;
+}
+
+.fp-draw-light {
+  animation: fp-draw-light-sweep 1.9s ease-in-out infinite;
+}
+
+.fp-draw-reveal {
+  animation: fp-draw-reveal-card 720ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-style: preserve-3d;
+}
