@@ -112,9 +112,9 @@ function getActiveDrawGroup(groups: DrawGameGroup[], visibleCount: number): Draw
   return groups.find((group) => visibleCount > group.startIndex && visibleCount <= group.endIndex) ?? groups[groups.length - 1];
 }
 
-function getProgrammaGridSize(stepCount: number) {
-  const columns = stepCount > 18 ? 4 : stepCount > 12 ? 3 : stepCount > 6 ? 2 : 1;
-  const rows = Math.max(Math.ceil(stepCount / columns), 1);
+function getProgrammaGridSize(heatCount: number) {
+  const columns = heatCount > 8 ? 3 : heatCount > 4 ? 2 : 1;
+  const rows = Math.max(Math.ceil(heatCount / columns), 1);
 
   return { columns, rows };
 }
@@ -909,7 +909,15 @@ export function PalioDraw() {
     ? Math.min(Math.max(visibleCount - activeGroup.startIndex, 0), activeGroup.steps.length)
     : 0;
   const groupIsComplete = !!activeGroup && activeGroupVisibleCount >= activeGroup.steps.length;
-  const { columns: programmaColumns, rows: programmaRows } = getProgrammaGridSize(activeGroup?.steps.length ?? 0);
+  const programmaHeatGroups = Array.from(new Set((activeGroup?.steps ?? []).map((step) => step.heatNumber))).map(
+    (heatNumber) => ({
+      heatNumber,
+      items: (activeGroup?.steps ?? [])
+        .map((step, index) => ({ globalIndex: (activeGroup?.startIndex ?? 0) + index, step }))
+        .filter(({ step }) => step.heatNumber === heatNumber)
+    })
+  );
+  const { columns: programmaColumns, rows: programmaRows } = getProgrammaGridSize(programmaHeatGroups.length);
   const activeStep = visibleCount > 0 ? drawSteps[visibleCount - 1] ?? null : null;
   const [showGameSummary, setShowGameSummary] = useState(false);
   const displayedStep = showGameSummary && groupIsComplete ? null : activeStep;
@@ -1027,6 +1035,12 @@ export function PalioDraw() {
                             ? `Batteria ${displayedStep.heatNumber}`
                             : 'Inizio estrazioni'}
                       </div>
+                      {displayedStep && (
+                        <div className="mt-1 text-sm font-black uppercase tracking-[0.18em] text-amber-100/60">
+                          Corsia {displayedStep.displayOrder} di{' '}
+                          {activeGroup?.steps.filter((step) => step.heatNumber === displayedStep.heatNumber).length ?? 1}
+                        </div>
+                      )}
                       {activeStep && (
                         <div className="mt-4 inline-flex max-w-full flex-col rounded-2xl border border-amber-100/25 bg-amber-50/10 px-4 py-3 shadow-xl shadow-black/20">
                           <span className="text-[11px] font-black uppercase tracking-[0.22em] text-amber-100/55">
@@ -1115,37 +1129,57 @@ export function PalioDraw() {
                       gridTemplateRows: `repeat(${programmaRows}, minmax(0, 1fr))`
                     }}
                   >
-                    {(activeGroup?.steps ?? []).map((step, index) => {
-                      const globalIndex = (activeGroup?.startIndex ?? 0) + index;
-                      const isRevealed = globalIndex < visibleCount;
-                      const isCurrent = !groupIsComplete && globalIndex === visibleCount - 1;
-                      const stemma = isRevealed ? getContradaStemma(step.contrada?.name) : undefined;
+                    {programmaHeatGroups.map(({ heatNumber, items }) => {
+                      const heatHasCurrent = items.some(
+                        ({ globalIndex }) => !groupIsComplete && globalIndex === visibleCount - 1
+                      );
+                      const heatIsFullyRevealed = items.every(({ globalIndex }) => globalIndex < visibleCount);
 
                       return (
                         <div
-                          className={`grid min-h-0 grid-cols-[28px_minmax(0,1fr)] items-center gap-2 rounded-xl border px-2.5 py-1.5 transition duration-500 ${
-                            isCurrent
-                              ? 'border-amber-100/60 bg-amber-100/20 text-amber-50'
-                              : isRevealed
-                                ? 'border-amber-100/16 bg-amber-50/10 text-amber-50/88'
-                                : 'border-amber-100/10 bg-black/20 text-amber-50/64'
+                          className={`flex min-h-0 flex-col rounded-xl border p-2 transition duration-500 ${
+                            heatHasCurrent
+                              ? 'border-amber-100/70 bg-amber-100/14'
+                              : heatIsFullyRevealed
+                                ? 'border-amber-100/22 bg-amber-50/8'
+                                : 'border-amber-100/10 bg-black/20'
                           }`}
-                          key={step.stepKey}
+                          key={heatNumber}
                         >
-                          <span className="text-sm font-black text-amber-200">{step.displayOrder}</span>
-                          <span className="flex min-w-0 items-center gap-1.5">
-                            {stemma && (
-                              <img src={stemma} alt="" className="h-6 w-6 shrink-0 rounded-full object-cover ring-1 ring-amber-100/30" />
-                            )}
-                            <span className="min-w-0">
-                              <span className="block truncate text-sm font-black leading-tight">
-                                {isRevealed ? step.contrada?.name ?? 'Contrada' : 'Sigillo chiuso'}
-                              </span>
-                              <span className="block truncate text-[9px] font-bold uppercase tracking-[0.12em] text-amber-100/50">
-                                Batteria {step.heatNumber} · {isRevealed ? 'Estratta' : 'Attesa'}
-                              </span>
+                          <div className="flex items-center justify-between gap-2 border-b border-amber-100/10 pb-1">
+                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-100/62">
+                              Batteria {heatNumber}
                             </span>
-                          </span>
+                            {heatHasCurrent && (
+                              <span className="rounded-full bg-amber-200 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.14em] text-[#2a1309]">
+                                In corso
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-1.5 flex flex-1 flex-col gap-1">
+                            {items.map(({ globalIndex, step }) => {
+                              const isRevealed = globalIndex < visibleCount;
+                              const isCurrent = !groupIsComplete && globalIndex === visibleCount - 1;
+
+                              return (
+                                <div
+                                  className={`grid flex-1 grid-cols-[22px_minmax(0,1fr)] items-center gap-1.5 rounded-lg px-1.5 transition duration-500 ${
+                                    isCurrent
+                                      ? 'bg-amber-100/24 text-amber-50'
+                                      : isRevealed
+                                        ? 'bg-amber-50/10 text-amber-50/88'
+                                        : 'bg-black/20 text-amber-50/64'
+                                  }`}
+                                  key={step.stepKey}
+                                >
+                                  <span className="text-xs font-black text-amber-200">{step.displayOrder}</span>
+                                  <span className="min-w-0 truncate text-sm font-black leading-tight">
+                                    {isRevealed ? step.contrada?.name ?? 'Contrada' : 'Sigillo chiuso'}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                       );
                     })}
