@@ -1,5 +1,6 @@
-import { Flag, Medal, Sparkles, Trophy } from 'lucide-react';
+import { Flag, Medal, Sparkles } from 'lucide-react';
 import { PalioWinnerCelebration } from '../components/PalioWinnerCelebration';
+import sforzindaLogo from '../assets/sforzinda-logo-inverted.png';
 import {
   palioGameLabels,
   formatNumber,
@@ -46,7 +47,7 @@ export function PalioLiveMobile() {
               {liveTitle}
             </h1>
           </div>
-          <Trophy className="h-8 w-8 shrink-0 text-amber-300" />
+          <img src={sforzindaLogo} alt="Sforzinda" className="h-8 w-8 shrink-0 object-contain" />
         </header>
 
         <main className="relative z-10 space-y-3 p-3 pb-8">

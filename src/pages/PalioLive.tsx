@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Flag, Medal, Sparkles, Trophy } from 'lucide-react';
+import { Flag, Medal, Sparkles } from 'lucide-react';
 import { PalioWinnerCelebration } from '../components/PalioWinnerCelebration';
+import sforzindaLogo from '../assets/sforzinda-logo-inverted.png';
 import {
   type PalioGame,
   palioGameLabels,
@@ -117,7 +118,7 @@ export function PalioLive() {
                 </div>
               </div>
             )}
-            <Trophy className="h-10 w-10 text-amber-300 sm:h-12 sm:w-12" />
+            <img src={sforzindaLogo} alt="Sforzinda" className="h-10 w-10 object-contain sm:h-12 sm:w-12" />
           </div>
         </header>
 

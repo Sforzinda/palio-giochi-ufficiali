@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { Award, Crown, Flag, Sparkles, Trophy } from 'lucide-react';
+import { Award, Crown, Flag, Sparkles } from 'lucide-react';
 import { getResultValue, type PalioEditionResult, type RankingItem } from '../hooks/usePalioLiveData';
+import sforzindaLogo from '../assets/sforzinda-logo-inverted.png';
 
 interface PalioWinnerCelebrationProps {
   result: PalioEditionResult | null;
@@ -115,7 +116,11 @@ export function PalioWinnerCelebration({ result, variant = 'desktop', winner }: 
 
         <div className="relative flex min-w-0 flex-col items-center justify-center px-1">
           <div className="fp-palio-winner-seal mx-auto flex items-center justify-center rounded-full border border-amber-200/60 bg-amber-100/15 shadow-xl shadow-amber-950/40">
-            <Trophy className={`${isMobile ? 'h-10 w-10' : 'h-14 w-14'} text-amber-200`} />
+            <img
+              src={sforzindaLogo}
+              alt="Sforzinda"
+              className={`${isMobile ? 'h-10 w-10' : 'h-14 w-14'} object-contain`}
+            />
           </div>
 
           <div className="mt-5 flex items-center justify-center gap-2 text-xs font-black uppercase tracking-[0.3em] text-amber-200/80 sm:text-sm">

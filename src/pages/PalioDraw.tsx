@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Player } from '@remotion/player';
-import { Flag, Gem, Trophy } from 'lucide-react';
+import { Flag, Gem } from 'lucide-react';
 import {
   AbsoluteFill,
   interpolate,
@@ -15,6 +15,7 @@ import {
   palioGameLabels,
   usePalioLiveData
 } from '../hooks/usePalioLiveData';
+import sforzindaLogo from '../assets/sforzinda-logo-inverted.png';
 
 // Nota: a differenza della versione originale in fantapalio, questo componente
 // non renderizza un proprio tag SEO (react-helmet-async): è responsabilità
@@ -239,7 +240,7 @@ function PalioTotalSummary({
             </p>
           </div>
           <div className="flex flex-col items-end gap-2">
-            <Trophy className="h-14 w-14 text-amber-200" />
+            <img src={sforzindaLogo} alt="Sforzinda" className="h-14 w-14 object-contain" />
             <div className="rounded-full border border-amber-100/20 bg-black/24 px-3 py-1 text-xs font-black uppercase tracking-[0.24em] text-amber-100/72">
               {activeIndex + 1}/{groups.length || 1}
             </div>
@@ -990,7 +991,7 @@ export function PalioDraw() {
                         {activeGroupVisibleCount}/{activeGroup?.steps.length ?? 0} contrade inviate
                       </p>
                     </div>
-                    <Trophy className="h-9 w-9 text-amber-200" />
+                    <img src={sforzindaLogo} alt="Sforzinda" className="h-9 w-9 object-contain" />
                   </div>
                   <div className="mt-3 space-y-1.5">
                     {(activeGroup?.steps ?? []).map((step, index) => {
