@@ -16,6 +16,7 @@ import {
   usePalioLiveData
 } from '../hooks/usePalioLiveData';
 import sforzindaLogo from '../assets/sforzinda-logo-inverted.png';
+import { getContradaStemma } from '../lib/contrada-stemmi';
 
 // Nota: a differenza della versione originale in fantapalio, questo componente
 // non renderizza un proprio tag SEO (react-helmet-async): è responsabilità
@@ -172,19 +173,28 @@ function PalioGameSummary({
                 <h3 className="mt-1 text-4xl font-black leading-none">{heatGroup.heatNumber}</h3>
               </div>
               <div className="mt-4 space-y-3">
-                {heatGroup.items.map((step) => (
+                {heatGroup.items.map((step) => {
+                  const stemma = getContradaStemma(step.contrada?.name);
+
+                  return (
                   <div key={step.stepKey} className="grid grid-cols-[42px_minmax(0,1fr)] items-center gap-3 rounded-2xl bg-[#2a1309]/8 px-3 py-2">
                     <span className="grid h-10 w-10 place-items-center rounded-full bg-[#2a1309] text-lg font-black text-amber-100">
                       {step.displayOrder}
                     </span>
-                    <div className="min-w-0">
-                      <div className="truncate text-xl font-black leading-tight">{step.contrada?.name ?? 'Contrada'}</div>
-                      {step.isUnavailable && (
-                        <div className="mt-0.5 text-xs font-black uppercase tracking-[0.18em] text-red-700">N.A.</div>
+                    <div className="flex min-w-0 items-center gap-2">
+                      {stemma && (
+                        <img src={stemma} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-[#2a1309]/20" />
                       )}
+                      <div className="min-w-0">
+                        <div className="truncate text-xl font-black leading-tight">{step.contrada?.name ?? 'Contrada'}</div>
+                        {step.isUnavailable && (
+                          <div className="mt-0.5 text-xs font-black uppercase tracking-[0.18em] text-red-700">N.A.</div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))}
@@ -292,14 +302,23 @@ function PalioTotalSummary({
                       </div>
                     </div>
                     <div className="mt-3 space-y-1.5">
-                      {heatGroup.items.map((step) => (
-                        <div key={step.stepKey} className="grid grid-cols-[24px_minmax(0,1fr)] gap-2 rounded-xl bg-amber-50/8 px-2 py-1.5">
+                      {heatGroup.items.map((step) => {
+                        const stemma = getContradaStemma(step.contrada?.name);
+
+                        return (
+                        <div key={step.stepKey} className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-2 rounded-xl bg-amber-50/8 px-2 py-1.5">
                           <span className="text-sm font-black text-amber-200">{step.displayOrder}</span>
-                          <span className="truncate text-sm font-black text-amber-50 sm:text-base">
-                            {step.contrada?.name ?? 'Contrada'}
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            {stemma && (
+                              <img src={stemma} alt="" className="h-5 w-5 shrink-0 rounded-full object-cover ring-1 ring-amber-200/30" />
+                            )}
+                            <span className="truncate text-sm font-black text-amber-50 sm:text-base">
+                              {step.contrada?.name ?? 'Contrada'}
+                            </span>
                           </span>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 ))}
@@ -364,6 +383,7 @@ function PalioDrawComposition({
   });
   const sweep = interpolate(frame % 120, [0, 120], [-40, 140]);
   const contradaName = step?.contrada?.name ?? 'Sigillo chiuso';
+  const contradaStemma = getContradaStemma(step?.contrada?.name);
   const summaryGroups = Array.from(new Set(summarySteps.map((summaryStep) => summaryStep.heatNumber)))
     .map((heatNumber) => ({
       heatNumber,
@@ -604,14 +624,17 @@ function PalioDrawComposition({
                       >
                         Batteria {group.heatNumber}
                       </div>
-                      {group.items.map((summaryStep) => (
+                      {group.items.map((summaryStep) => {
+                        const summaryStemma = getContradaStemma(summaryStep.contrada?.name);
+
+                        return (
                         <div
                           key={summaryStep.stepKey}
                           style={{
                             alignItems: 'center',
                             display: 'grid',
                             gap: 12,
-                            gridTemplateColumns: '42px minmax(0, 1fr)',
+                            gridTemplateColumns: summaryStemma ? '42px 34px minmax(0, 1fr)' : '42px minmax(0, 1fr)',
                             marginTop: 12
                           }}
                         >
@@ -630,6 +653,13 @@ function PalioDrawComposition({
                           >
                             {summaryStep.displayOrder}
                           </div>
+                          {summaryStemma && (
+                            <img
+                              src={summaryStemma}
+                              alt=""
+                              style={{ borderRadius: '50%', height: 34, objectFit: 'cover', width: 34 }}
+                            />
+                          )}
                           <div
                             style={{
                               fontFamily: 'ui-sans-serif, system-ui, sans-serif',
@@ -644,7 +674,8 @@ function PalioDrawComposition({
                             {summaryStep.contrada?.name ?? 'Contrada'}
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ))}
                 </div>
@@ -704,6 +735,21 @@ function PalioDrawComposition({
                 >
                   Contrada estratta
                 </div>
+                {contradaStemma && (
+                  <img
+                    src={contradaStemma}
+                    alt=""
+                    style={{
+                      borderRadius: '50%',
+                      boxShadow: '0 0 0 6px rgba(42, 19, 9, 0.14)',
+                      height: 148,
+                      marginTop: 24,
+                      objectFit: 'cover',
+                      opacity: nameOpacity,
+                      width: 148
+                    }}
+                  />
+                )}
                 <div
                   style={{
                     fontSize: contradaName.length > 12 ? 132 : 168,
@@ -927,8 +973,17 @@ export function PalioDraw() {
                           <span className="text-[11px] font-black uppercase tracking-[0.22em] text-amber-100/55">
                             Ultima contrada estratta
                           </span>
-                          <span className="mt-1 truncate text-3xl font-black leading-none text-amber-50 sm:text-4xl">
-                            {activeStep.contrada?.name ?? 'Contrada'}
+                          <span className="mt-1 flex min-w-0 items-center gap-2">
+                            {getContradaStemma(activeStep.contrada?.name) && (
+                              <img
+                                src={getContradaStemma(activeStep.contrada?.name)}
+                                alt=""
+                                className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-amber-100/40"
+                              />
+                            )}
+                            <span className="truncate text-3xl font-black leading-none text-amber-50 sm:text-4xl">
+                              {activeStep.contrada?.name ?? 'Contrada'}
+                            </span>
                           </span>
                         </div>
                       )}
@@ -998,6 +1053,7 @@ export function PalioDraw() {
                       const globalIndex = (activeGroup?.startIndex ?? 0) + index;
                       const isRevealed = globalIndex < visibleCount;
                       const isCurrent = !groupIsComplete && globalIndex === visibleCount - 1;
+                      const stemma = isRevealed ? getContradaStemma(step.contrada?.name) : undefined;
 
                       return (
                         <div
@@ -1011,12 +1067,17 @@ export function PalioDraw() {
                           key={step.stepKey}
                         >
                           <span className="text-lg font-black text-amber-200">{step.displayOrder}</span>
-                          <span className="min-w-0">
-                            <span className="block truncate text-base font-black leading-tight">
-                              {isRevealed ? step.contrada?.name ?? 'Contrada' : 'Sigillo chiuso'}
-                            </span>
-                            <span className="block truncate text-[10px] font-bold uppercase tracking-[0.14em] text-amber-100/50">
-                              {palioGameLabels[step.game]} · Batteria {step.heatNumber}
+                          <span className="flex min-w-0 items-center gap-2">
+                            {stemma && (
+                              <img src={stemma} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover ring-1 ring-amber-100/30" />
+                            )}
+                            <span className="min-w-0">
+                              <span className="block truncate text-base font-black leading-tight">
+                                {isRevealed ? step.contrada?.name ?? 'Contrada' : 'Sigillo chiuso'}
+                              </span>
+                              <span className="block truncate text-[10px] font-bold uppercase tracking-[0.14em] text-amber-100/50">
+                                {palioGameLabels[step.game]} · Batteria {step.heatNumber}
+                              </span>
                             </span>
                           </span>
                           <span className="text-right text-[11px] font-black uppercase tracking-[0.12em] text-amber-100/58">

@@ -1,7 +1,9 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle, Clock, Eye, EyeOff, Flag, Minus, Plus, PlusCircle, Repeat, RotateCcw, Save, Send, Trophy } from 'lucide-react';
+import { AlertCircle, CheckCircle, Clock, Eye, EyeOff, Flag, Minus, Plus, PlusCircle, Repeat, RotateCcw, Save, Send, Trophy, Users as UsersIcon } from 'lucide-react';
 import { getSupabaseClient } from '../config';
 import { PalioAuthGate } from './PalioAuthGate';
+import { PalioUserManagement } from './PalioUserManagement';
+import { usePalioAuth } from '../hooks/usePalioAuth';
 import {
   type Contrada,
   type PalioEdition,
@@ -133,7 +135,8 @@ function PalioResultsInputContent() {
   const [creatingEdition, setCreatingEdition] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [heatsStatusMessage, setHeatsStatusMessage] = useState('');
-  const [activeSection, setActiveSection] = useState<'estrazioni' | 'giochi'>('estrazioni');
+  const [activeSection, setActiveSection] = useState<'estrazioni' | 'giochi' | 'utenti'>('estrazioni');
+  const { isAdmin } = usePalioAuth();
   const [resultsSortMode, setResultsSortMode] = useState<'alfabetico' | 'batteria' | 'corsia'>('alfabetico');
 
   const fetchEditions = useCallback(async () => {
@@ -1084,7 +1087,25 @@ function PalioResultsInputContent() {
           <Trophy className="h-4 w-4" />
           Giochi
         </button>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => setActiveSection('utenti')}
+            className={`flex items-center gap-2 rounded-t-md px-4 py-2 text-sm font-semibold transition ${
+              activeSection === 'utenti' ? 'border-b-2 border-palio-500 text-palio-300' : 'text-stone-400 hover:text-stone-200'
+            }`}
+          >
+            <UsersIcon className="h-4 w-4" />
+            Utenti
+          </button>
+        )}
       </div>
+
+      {activeSection === 'utenti' && isAdmin && (
+        <div className="mt-4">
+          <PalioUserManagement />
+        </div>
+      )}
 
       {activeSection === 'estrazioni' && (
         <div className="mt-4 space-y-6">
