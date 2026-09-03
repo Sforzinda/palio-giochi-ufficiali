@@ -855,19 +855,19 @@ export function PalioDraw() {
         <div className="pointer-events-none absolute -left-24 top-20 h-72 w-72 rounded-full bg-orange-500/20 blur-3xl fp-draw-orb-one" />
         <div className="pointer-events-none absolute -right-24 bottom-10 h-80 w-80 rounded-full bg-lime-300/12 blur-3xl fp-draw-orb-two" />
 
-        <header className="relative z-10 mx-auto flex max-w-7xl items-center justify-between gap-4">
+        <header className="relative z-10 flex w-full items-center justify-between gap-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.32em] text-amber-100/70">
               <Flag className="h-4 w-4" />
               Estrazioni batterie
             </div>
-            <h1 className="mt-2 truncate text-3xl font-black leading-none text-amber-50 sm:text-5xl lg:text-6xl">
+            <h1 className="mt-2 truncate text-3xl font-black leading-none text-amber-50 sm:text-5xl lg:text-6xl xl:text-7xl">
               {liveTitle}
             </h1>
           </div>
         </header>
 
-        <main className="relative z-10 mx-auto mt-6 grid max-w-7xl gap-5 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1.08fr)_minmax(360px,0.92fr)]">
+        <main className="relative z-10 mt-6 grid w-full gap-5 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1.1fr)_minmax(400px,0.9fr)]">
           {loading ? (
             <section className="flex min-h-[72vh] items-center justify-center rounded-[2rem] border border-amber-100/20 bg-black/28 text-xl font-black text-amber-100">
               Caricamento estrazioni...
@@ -915,7 +915,7 @@ export function PalioDraw() {
                             ? palioGameLabels[displayedStep.game]
                             : activeGameLabel ?? 'Pronti al sorteggio'}
                       </div>
-                      <div className="mt-2 text-2xl font-black text-amber-50 sm:text-4xl">
+                      <div className="mt-2 text-3xl font-black text-amber-50 sm:text-5xl">
                         {showGameSummary && groupIsComplete
                           ? 'Batterie completate'
                           : displayedStep
@@ -927,7 +927,7 @@ export function PalioDraw() {
                           <span className="text-[11px] font-black uppercase tracking-[0.22em] text-amber-100/55">
                             Ultima contrada estratta
                           </span>
-                          <span className="mt-1 truncate text-2xl font-black leading-none text-amber-50 sm:text-3xl">
+                          <span className="mt-1 truncate text-3xl font-black leading-none text-amber-50 sm:text-4xl">
                             {activeStep.contrada?.name ?? 'Contrada'}
                           </span>
                         </div>
@@ -935,12 +935,12 @@ export function PalioDraw() {
                     </div>
                     <div className="rounded-2xl border border-amber-100/24 bg-amber-50/10 px-4 py-3 text-right">
                       <div className="text-xs font-bold uppercase tracking-[0.2em] text-amber-100/55">Avanzamento</div>
-                      <div className="mt-1 text-2xl font-black text-amber-50">{visibleCount}/{drawSteps.length}</div>
+                      <div className="mt-1 text-3xl font-black text-amber-50">{visibleCount}/{drawSteps.length}</div>
                     </div>
                   </div>
 
                   <div className="grid flex-1 place-items-center py-6">
-                    <div className="relative w-full max-w-5xl overflow-hidden rounded-[2rem] border border-amber-100/35 bg-black/35 shadow-[0_30px_90px_rgba(0,0,0,.5)]">
+                    <div className="relative w-full overflow-hidden rounded-[2rem] border border-amber-100/35 bg-black/35 shadow-[0_30px_90px_rgba(0,0,0,.5)]">
                       <Player
                         key={`${groupIsComplete ? `summary-${activeGroup?.game}` : displayedStep?.stepKey ?? 'sealed'}-${visibleCount}`}
                         autoPlay
@@ -984,16 +984,16 @@ export function PalioDraw() {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <div className="text-xs font-black uppercase tracking-[0.24em] text-amber-100/55">Programma</div>
-                      <h2 className="mt-1 text-2xl font-black text-amber-50">
+                      <h2 className="mt-1 text-3xl font-black text-amber-50">
                         {activeGameLabel ? `${activeGameLabel} in ordine` : 'Batterie in ordine'}
                       </h2>
-                      <p className="mt-1 text-sm font-semibold text-amber-100/58">
+                      <p className="mt-1 text-base font-semibold text-amber-100/58">
                         {activeGroupVisibleCount}/{activeGroup?.steps.length ?? 0} contrade inviate
                       </p>
                     </div>
-                    <img src={sforzindaLogo} alt="Sforzinda" className="h-9 w-9 object-contain" />
+                    <img src={sforzindaLogo} alt="Sforzinda" className="h-11 w-11 object-contain" />
                   </div>
-                  <div className="mt-3 space-y-1.5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
+                  <div className="mt-3 space-y-2 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
                     {(activeGroup?.steps ?? []).map((step, index) => {
                       const globalIndex = (activeGroup?.startIndex ?? 0) + index;
                       const isRevealed = globalIndex < visibleCount;
@@ -1001,7 +1001,7 @@ export function PalioDraw() {
 
                       return (
                         <div
-                          className={`grid grid-cols-[28px_minmax(0,1fr)_62px] items-center gap-2 rounded-xl border px-2.5 py-1.5 transition duration-500 ${
+                          className={`grid grid-cols-[34px_minmax(0,1fr)_76px] items-center gap-2.5 rounded-xl border px-3 py-2 transition duration-500 ${
                             isCurrent
                               ? 'border-amber-100/60 bg-amber-100/20 text-amber-50'
                               : isRevealed
@@ -1010,16 +1010,16 @@ export function PalioDraw() {
                           }`}
                           key={step.stepKey}
                         >
-                          <span className="text-base font-black text-amber-200">{step.displayOrder}</span>
+                          <span className="text-lg font-black text-amber-200">{step.displayOrder}</span>
                           <span className="min-w-0">
-                            <span className="block truncate text-sm font-black leading-tight">
+                            <span className="block truncate text-base font-black leading-tight">
                               {isRevealed ? step.contrada?.name ?? 'Contrada' : 'Sigillo chiuso'}
                             </span>
-                            <span className="block truncate text-[9px] font-bold uppercase tracking-[0.14em] text-amber-100/50">
+                            <span className="block truncate text-[10px] font-bold uppercase tracking-[0.14em] text-amber-100/50">
                               {palioGameLabels[step.game]} · Batteria {step.heatNumber}
                             </span>
                           </span>
-                          <span className="text-right text-[10px] font-black uppercase tracking-[0.12em] text-amber-100/58">
+                          <span className="text-right text-[11px] font-black uppercase tracking-[0.12em] text-amber-100/58">
                             {isRevealed ? 'Estratta' : 'Attesa'}
                           </span>
                         </div>
