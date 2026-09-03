@@ -208,15 +208,18 @@ export function PalioLive() {
                             const stemma = getContradaStemma(contrada?.name);
 
                             return (
-                              <div key={`${result.game}-${result.contrada_id}`} className="grid grid-cols-[minmax(0,1fr)_72px_82px] items-center gap-2 rounded-md bg-black/20 px-2 py-1.5">
-                                <div className="flex min-w-0 items-center gap-2">
-                                  {stemma && (
-                                    <img src={stemma} alt="" className="h-6 w-6 shrink-0 rounded-full object-cover ring-1 ring-amber-200/30" />
-                                  )}
-                                  <div className="min-w-0">
-                                    <div className="truncate text-base font-black text-amber-50">{contrada?.name ?? 'Contrada'}</div>
-                                    <div className="text-xs font-semibold uppercase tracking-wide text-amber-200/55">{getResultPositionLabel(result)}</div>
-                                  </div>
+                              <div
+                                key={`${result.game}-${result.contrada_id}`}
+                                className="grid grid-cols-[minmax(0,1fr)_72px_82px] items-center gap-2 rounded-md bg-black/20 bg-cover bg-center px-2 py-1.5"
+                                style={
+                                  stemma
+                                    ? { backgroundImage: `linear-gradient(90deg, rgba(10,6,4,.82), rgba(10,6,4,.55) 55%, rgba(10,6,4,.82)), url(${stemma})` }
+                                    : undefined
+                                }
+                              >
+                                <div className="min-w-0">
+                                  <div className="truncate text-base font-black text-amber-50">{contrada?.name ?? 'Contrada'}</div>
+                                  <div className="text-xs font-semibold uppercase tracking-wide text-amber-200/55">{getResultPositionLabel(result)}</div>
                                 </div>
                                 <div className="text-right text-lg font-black text-amber-300">{formatNumber(result.points)}</div>
                                 <div className="truncate text-right text-sm font-semibold text-amber-100/75">{getResultValue(result)}</div>
