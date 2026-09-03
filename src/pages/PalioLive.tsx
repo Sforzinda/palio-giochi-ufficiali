@@ -193,16 +193,16 @@ export function PalioLive() {
                       {gameResultsPages.length > 1 ? `${activeGamePageIndex + 1}/${gameResultsPages.length}` : 'Live'}
                     </span>
                   </div>
-                  <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden xl:grid-cols-2">
+                  <div className="grid h-full min-h-0 flex-1 auto-rows-fr grid-cols-1 gap-3 overflow-hidden xl:grid-cols-2">
                     {activeGameGroups.map((group) => (
-                      <div key={group.game} className="min-h-0 rounded-md border border-amber-200/20 bg-amber-50/10 p-3">
+                      <div key={group.game} className="flex h-full min-h-0 flex-col rounded-md border border-amber-200/20 bg-amber-50/10 p-3">
                         <div className="mb-2 flex items-center justify-between border-b border-amber-200/20 pb-2">
                           <h3 className="text-2xl font-black text-amber-100">{palioGameLabels[group.game]}</h3>
                           <span className="text-sm font-semibold text-amber-200/70">
                             {group.results.length}/{contrade.length}
                           </span>
                         </div>
-                        <div className="grid gap-1.5 sm:grid-cols-2">
+                        <div className="grid flex-1 auto-rows-fr gap-1.5 sm:grid-cols-2">
                           {group.results.map((result) => {
                             const contrada = contrade.find((item) => item.id === result.contrada_id);
                             const stemma = getContradaStemma(contrada?.name);

@@ -218,18 +218,22 @@ function PalioTotalSummary({
   liveTitle: string;
 }) {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
 
   useEffect(() => {
     setActiveIndex(0);
+    setIsPaused(false);
+  }, [groups]);
 
-    if (groups.length <= 1) return;
+  useEffect(() => {
+    if (groups.length <= 1 || isPaused) return;
 
     const timer = window.setInterval(() => {
       setActiveIndex((currentIndex) => (currentIndex + 1) % groups.length);
     }, 5600);
 
     return () => window.clearInterval(timer);
-  }, [groups]);
+  }, [groups, isPaused]);
 
   const activeGroup = groups[activeIndex] ?? null;
   const heatGroups = activeGroup ? groupStepsByHeat(activeGroup.steps) : [];
@@ -251,29 +255,54 @@ function PalioTotalSummary({
           </div>
           <div className="flex flex-col items-end gap-2">
             <img src={sforzindaLogo} alt="Sforzinda" className="h-14 w-14 object-contain" />
-            <div className="rounded-full border border-amber-100/20 bg-black/24 px-3 py-1 text-xs font-black uppercase tracking-[0.24em] text-amber-100/72">
-              {activeIndex + 1}/{groups.length || 1}
+            <div className="flex items-center gap-2">
+              <div className="rounded-full border border-amber-100/20 bg-black/24 px-3 py-1 text-xs font-black uppercase tracking-[0.24em] text-amber-100/72">
+                {activeIndex + 1}/{groups.length || 1}
+              </div>
+              {groups.length > 1 && (
+                <button
+                  aria-pressed={isPaused}
+                  className="rounded-full border border-amber-100/24 bg-black/24 px-3 py-1 text-xs font-black uppercase tracking-[0.24em] text-amber-100/72 transition hover:bg-black/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-200"
+                  onClick={() => setIsPaused((currentlyPaused) => !currentlyPaused)}
+                  type="button"
+                >
+                  {isPaused ? 'Riprendi' : 'Pausa'}
+                </button>
+              )}
             </div>
           </div>
         </div>
 
-        <div className="mt-5 flex flex-wrap gap-2">
+        <div aria-label="Giochi del riepilogo" className="mt-5 flex flex-wrap gap-2" role="tablist">
           {groups.map((group, index) => {
             const isActive = index === activeIndex;
 
             return (
-              <div
-                className={`rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.2em] transition ${
+              <button
+                aria-selected={isActive}
+                className={`rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.2em] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-200 ${
                   isActive
                     ? 'border-amber-100/60 bg-amber-100/18 text-amber-50'
                     : 'border-amber-100/14 bg-black/16 text-amber-100/54'
                 }`}
                 key={group.game}
+                onClick={() => {
+                  setActiveIndex(index);
+                  setIsPaused(true);
+                }}
+                role="tab"
+                type="button"
               >
                 {palioGameLabels[group.game]}
-              </div>
+              </button>
             );
           })}
+        </div>
+
+        <div aria-live="polite" className="sr-only">
+          {activeGroup
+            ? `${palioGameLabels[activeGroup.game]}: ${activeGroup.steps.length} contrade estratte`
+            : ''}
         </div>
 
         <div className="mt-5 flex min-h-0 flex-1 items-center">
@@ -951,6 +980,12 @@ export function PalioDraw() {
                   ))}
                 </div>
 
+                <div aria-live="polite" className="sr-only">
+                  {activeStep
+                    ? `${activeStep.contrada?.name ?? 'Contrada'} estratta, ${palioGameLabels[activeStep.game]}, batteria ${activeStep.heatNumber}`
+                    : ''}
+                </div>
+
                 <div className="relative z-10 flex min-h-[calc(72vh-4rem)] flex-col justify-between">
                   <div className="flex items-start justify-between gap-4">
                     <div>
@@ -1062,7 +1097,7 @@ export function PalioDraw() {
                               ? 'border-amber-100/60 bg-amber-100/20 text-amber-50'
                               : isRevealed
                                 ? 'border-amber-100/16 bg-amber-50/10 text-amber-50/88'
-                                : 'border-amber-100/10 bg-black/20 text-amber-50/42'
+                                : 'border-amber-100/10 bg-black/20 text-amber-50/64'
                           }`}
                           key={step.stepKey}
                         >
