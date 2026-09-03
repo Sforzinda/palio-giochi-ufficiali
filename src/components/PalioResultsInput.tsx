@@ -244,7 +244,7 @@ function PalioResultsInputContent() {
 
   const isFinaleReady = useMemo(() => {
     if (currentMonth !== 'ottobre') return true;
-    const expectedGames = getAvailablePalioGamesForMonth(currentMonth).filter((g) => g !== 'finale');
+    const expectedGames: PalioGame[] = getAvailablePalioGamesForMonth(currentMonth).filter((g) => g !== 'finale');
     const expectedCount = contrade.length * expectedGames.length;
     const completedCount = editionResults.filter((result) =>
       expectedGames.includes(result.game) && result.points !== null && !Number.isNaN(Number(result.points))
