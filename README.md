@@ -35,11 +35,17 @@ initPalioGiochiUfficiali({
 });
 ```
 
-Importare anche `src/styles/palio-draw.css` nel CSS globale dell'app per le
-animazioni usate da `<PalioDraw />`.
+Importare anche `src/styles/palio-draw.css` (per `<PalioDraw />`) e
+`src/styles/palio-winner.css` (per `<PalioLive />`/`<PalioLiveMobile />`, che
+usano `<PalioWinnerCelebration />`) nel CSS globale dell'app.
+
+**Nota**: `<PalioLive />`/`<PalioLiveMobile />` qui NON includono le "sfide"
+(QR code per punti Fanta) presenti nella versione originale su fantapalio —
+è una feature di gamification del Fanta, volutamente esclusa dai risultati
+ufficiali pubblici (vedi discussione issue #97).
 
 ## Stato
 
 - [x] `/estrazioni` — `usePalioLiveData` + `PalioDraw` (porting da fantapalio)
-- [ ] `/risultati` — vista live (porting `PalioLive`/`PalioLiveMobile`)
+- [x] `/risultati` — vista live `PalioLive`/`PalioLiveMobile` + `PalioWinnerCelebration` (porting da fantapalio, senza le sfide Fanta)
 - [ ] `/risultati` — inserimento risultati ufficiali (estratto da `Admin.tsx` di fantapalio, senza il ricalcolo punteggi Fanta)

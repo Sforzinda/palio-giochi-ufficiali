@@ -1,0 +1,299 @@
+/*
+ * Stili richiesti da <PalioWinnerCelebration />. Porting 1:1 delle classi
+ * fp-palio-winner-* di fantapalio/src/index.css. Importare insieme a
+ * palio-draw.css nel CSS globale dell'app consumatrice.
+ */
+
+@keyframes fp-palio-winner-stage-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes fp-palio-winner-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -7px, 0);
+  }
+}
+
+@keyframes fp-palio-winner-shimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+@keyframes fp-palio-winner-radiance-turn {
+  0% {
+    transform: rotate(0deg) scale(1.02);
+  }
+  100% {
+    transform: rotate(360deg) scale(1.02);
+  }
+}
+
+@keyframes fp-palio-winner-curtain-open-left {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-38%);
+  }
+}
+
+@keyframes fp-palio-winner-curtain-open-right {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(38%);
+  }
+}
+
+@keyframes fp-palio-winner-seal-rise {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 24px, 0) scale(0.82);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes fp-palio-winner-title-rise {
+  0% {
+    opacity: 0;
+    letter-spacing: 0.06em;
+    transform: translate3d(0, 28px, 0);
+  }
+  100% {
+    opacity: 1;
+    letter-spacing: 0;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes fp-palio-winner-pennant-wave {
+  0%,
+  100% {
+    transform: rotate(-5deg) translateY(0);
+  }
+  50% {
+    transform: rotate(6deg) translateY(4px);
+  }
+}
+
+@keyframes fp-palio-winner-confetto-drift {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, -24px, 0) rotate(0deg);
+  }
+  12%,
+  72% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(18px, 58px, 0) rotate(220deg);
+  }
+}
+
+@keyframes fp-palio-winner-stat-rise {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 18px, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.fp-palio-winner-stage {
+  animation: fp-palio-winner-stage-in 760ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  isolation: isolate;
+}
+
+.fp-palio-winner-spotlight {
+  background:
+    radial-gradient(circle at 50% 22%, rgba(255, 244, 194, 0.2), transparent 28%),
+    radial-gradient(circle at 50% 50%, rgba(251, 191, 36, 0.12), transparent 48%);
+  mix-blend-mode: screen;
+  opacity: 0.9;
+}
+
+.fp-palio-winner-rim {
+  border: 1px solid rgba(255, 244, 194, 0.12);
+  box-shadow:
+    inset 0 0 0 1px rgba(120, 53, 15, 0.45),
+    inset 0 0 0 8px rgba(24, 15, 10, 0.32);
+}
+
+.fp-palio-winner-radiance {
+  background:
+    conic-gradient(from 0deg at 50% 42%, transparent 0deg, rgba(252, 211, 77, 0.18) 12deg, transparent 24deg, transparent 38deg, rgba(254, 243, 199, 0.12) 50deg, transparent 68deg),
+    radial-gradient(circle at 50% 35%, rgba(251, 191, 36, 0.34), transparent 46%);
+  animation: fp-palio-winner-radiance-turn 26s linear infinite;
+  mask-image: radial-gradient(circle at 50% 45%, black 0, black 48%, transparent 78%);
+}
+
+.fp-palio-winner-tapestry {
+  background-image:
+    linear-gradient(90deg, rgba(255, 244, 194, 0.16) 1px, transparent 1px),
+    linear-gradient(rgba(255, 244, 194, 0.14) 1px, transparent 1px),
+    repeating-linear-gradient(135deg, rgba(120, 53, 15, 0.28) 0 8px, rgba(69, 26, 3, 0.22) 8px 16px);
+  background-size: 38px 38px, 38px 38px, 42px 42px;
+  opacity: 0.34;
+  mask-image: radial-gradient(circle at 50% 42%, black, transparent 82%);
+}
+
+.fp-palio-winner-drape {
+  background:
+    linear-gradient(180deg, rgba(255, 244, 194, 0.14), rgba(24, 15, 10, 0)),
+    repeating-linear-gradient(90deg, rgba(255, 244, 194, 0.08) 0 2px, transparent 2px 24px);
+  opacity: 0.75;
+}
+
+.fp-palio-winner-drape-line {
+  background: linear-gradient(90deg, transparent, rgba(255, 244, 194, 0.85), transparent);
+  box-shadow: 0 0 20px rgba(251, 191, 36, 0.2);
+}
+
+.fp-palio-winner-curtain {
+  width: 23%;
+  background:
+    linear-gradient(90deg, rgba(69, 26, 3, 0.96), rgba(146, 64, 14, 0.72), rgba(69, 26, 3, 0.9)),
+    repeating-linear-gradient(90deg, rgba(254, 243, 199, 0.09) 0 1px, transparent 1px 18px);
+  box-shadow: inset 0 0 30px rgba(24, 15, 10, 0.68);
+}
+
+.fp-palio-winner-curtain-left {
+  animation: fp-palio-winner-curtain-open-left 1500ms cubic-bezier(0.16, 1, 0.3, 1) 220ms both;
+}
+
+.fp-palio-winner-curtain-right {
+  animation: fp-palio-winner-curtain-open-right 1500ms cubic-bezier(0.16, 1, 0.3, 1) 220ms both;
+}
+
+.fp-palio-winner-seal {
+  height: clamp(4rem, 8vw, 6.5rem);
+  width: clamp(4rem, 8vw, 6.5rem);
+  animation: fp-palio-winner-seal-rise 900ms cubic-bezier(0.16, 1, 0.3, 1) 380ms both;
+}
+
+.fp-palio-winner-title {
+  animation: fp-palio-winner-title-rise 900ms cubic-bezier(0.16, 1, 0.3, 1) 520ms both;
+  text-shadow: 0 8px 28px rgba(69, 26, 3, 0.78), 0 0 34px rgba(251, 191, 36, 0.28);
+}
+
+.fp-palio-winner-name-frame {
+  background:
+    linear-gradient(135deg, rgba(255, 244, 194, 0.1), rgba(24, 15, 10, 0.1)),
+    linear-gradient(90deg, rgba(69, 26, 3, 0.8), rgba(120, 53, 15, 0.4), rgba(69, 26, 3, 0.8));
+  border: 1px solid rgba(255, 244, 194, 0.22);
+  box-shadow:
+    inset 0 0 0 1px rgba(24, 15, 10, 0.28),
+    0 18px 46px rgba(24, 15, 10, 0.48);
+  clip-path: polygon(0 10px, 10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px));
+}
+
+.fp-palio-winner-name-backdrop {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 244, 194, 0.2), transparent 48%),
+    linear-gradient(90deg, transparent, rgba(251, 191, 36, 0.12), transparent);
+  filter: blur(1px);
+  opacity: 0.85;
+}
+
+.fp-palio-winner-side-panel {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: 1.25rem;
+  border: 1px solid rgba(255, 244, 194, 0.16);
+  background:
+    linear-gradient(180deg, rgba(24, 15, 10, 0.7), rgba(24, 15, 10, 0.35)),
+    radial-gradient(circle at 50% 0%, rgba(251, 191, 36, 0.14), transparent 60%);
+  box-shadow: inset 0 0 28px rgba(24, 15, 10, 0.32);
+}
+
+.fp-palio-winner-side-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 4.25rem;
+  width: 4.25rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 244, 194, 0.38);
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.14), transparent 35%),
+    linear-gradient(180deg, rgba(251, 191, 36, 0.2), rgba(69, 26, 3, 0.48));
+  box-shadow: 0 18px 36px rgba(24, 15, 10, 0.45);
+  animation: fp-palio-winner-float 4.5s ease-in-out infinite;
+}
+
+.fp-palio-winner-side-panel p {
+  text-wrap: balance;
+}
+
+.fp-palio-winner-pennant {
+  clip-path: polygon(0 0, 100% 0, 100% 74%, 50% 100%, 0 74%);
+  animation: fp-palio-winner-pennant-wave 2.4s ease-in-out infinite;
+}
+
+.fp-palio-winner-confetto {
+  animation: fp-palio-winner-confetto-drift 3.6s ease-in-out infinite;
+}
+
+.fp-palio-winner-stat {
+  animation: fp-palio-winner-stat-rise 720ms cubic-bezier(0.16, 1, 0.3, 1) 720ms both;
+}
+
+.fp-palio-winner-name-frame .fp-palio-winner-title {
+  animation-delay: 580ms;
+  text-shadow: 0 10px 32px rgba(69, 26, 3, 0.82), 0 0 36px rgba(251, 191, 36, 0.24);
+}
+
+.fp-palio-winner-name-frame::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 244, 194, 0.2), transparent);
+  background-size: 200% 100%;
+  opacity: 0.35;
+  animation: fp-palio-winner-shimmer 8s linear infinite;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fp-palio-winner-stage,
+  .fp-palio-winner-spotlight,
+  .fp-palio-winner-rim,
+  .fp-palio-winner-radiance,
+  .fp-palio-winner-drape,
+  .fp-palio-winner-drape-line,
+  .fp-palio-winner-curtain-left,
+  .fp-palio-winner-curtain-right,
+  .fp-palio-winner-seal,
+  .fp-palio-winner-title,
+  .fp-palio-winner-name-frame::after,
+  .fp-palio-winner-pennant,
+  .fp-palio-winner-confetto,
+  .fp-palio-winner-stat,
+  .fp-palio-winner-side-badge {
+    animation: none;
+  }
+}
