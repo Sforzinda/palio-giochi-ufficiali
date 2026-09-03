@@ -252,17 +252,20 @@ export function PalioLive() {
                         const stemma = getContradaStemma(item.name);
 
                         return (
-                        <div key={item.id} className="grid min-h-0 grid-cols-[44px_minmax(0,1fr)_88px] items-center rounded-md border border-amber-200/20 bg-amber-50/10 px-2 py-1.5 sm:grid-cols-[52px_minmax(0,1fr)_104px]">
+                        <div
+                          key={item.id}
+                          className="grid min-h-0 grid-cols-[44px_minmax(0,1fr)_88px] items-center rounded-md border border-amber-200/20 bg-amber-50/10 bg-cover bg-center px-2 py-1.5 sm:grid-cols-[52px_minmax(0,1fr)_104px]"
+                          style={
+                            stemma
+                              ? { backgroundImage: `linear-gradient(90deg, rgba(10,6,4,.82), rgba(10,6,4,.55) 55%, rgba(10,6,4,.82)), url(${stemma})` }
+                              : undefined
+                          }
+                        >
                           <div className="text-2xl font-black text-amber-300">{item.rank}</div>
-                          <div className="flex min-w-0 items-center gap-2">
-                            {stemma && (
-                              <img src={stemma} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-amber-200/30" />
-                            )}
-                            <div className="min-w-0">
-                              <div className="truncate text-lg font-black text-amber-50 sm:text-xl">{item.name}</div>
-                              <div className="text-xs text-amber-100/60">
-                                {item.completedGames}/{expectedGames.length} prove completate
-                              </div>
+                          <div className="min-w-0">
+                            <div className="truncate text-lg font-black text-amber-50 sm:text-xl">{item.name}</div>
+                            <div className="text-xs text-amber-100/60">
+                              {item.completedGames}/{expectedGames.length} prove completate
                             </div>
                           </div>
                           <div className="text-right text-2xl font-black text-amber-100">
