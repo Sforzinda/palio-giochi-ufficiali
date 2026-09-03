@@ -1,10 +1,11 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle, Clock, PlusCircle, Save } from 'lucide-react';
+import { AlertCircle, CheckCircle, Clock, PlusCircle, Repeat, Save } from 'lucide-react';
 import { getSupabaseClient } from '../config';
 import { PalioAuthGate } from './PalioAuthGate';
 import {
   type Contrada,
   type PalioEdition,
+  type PalioEditionHeat,
   type PalioGame,
   palioGameLabels as liveGameLabels,
 } from '../hooks/usePalioLiveData';
@@ -23,16 +24,16 @@ import {
   validatePalioRows,
 } from '../lib/palio-results';
 
-// Porting semplificato di handleSavePalioResults (Admin.tsx di fantapalio):
-// stesse tabelle (palio_edition_results), stessa RLS (can_manage_palio_games()),
-// ma SENZA gestione batterie/no-players (resta nell'Admin del Fanta) e SENZA
-// la correzione manuale del calcolo (riservata all'Admin pieno). Non chiama
-// mai il ricalcolo dei punteggi Fanta: quello resta esclusivo dell'Admin.
+// Porting di handleSavePalioResults / handleSavePalioHeats / handleGeneratePalioHeats
+// (Admin.tsx di fantapalio): stesse tabelle (palio_edition_results, palio_edition_heats),
+// stessa RLS (can_manage_palio_games()). Non chiama mai il ricalcolo dei punteggi
+// Fanta: quello resta esclusivo dell'Admin del Fanta.
 
 const emptyResultRow = (contradaId: string): PalioEditionResultInput => ({
   adjusted_time_seconds: '',
   contrada_id: contradaId,
   final_bonus_points: '',
+  is_calculation_overridden: false,
   is_disqualified: false,
   melocotogno_2_count: '',
   melocotogno_5_count: '',
@@ -57,11 +58,15 @@ function PalioResultsInputContent() {
   const [game, setGame] = useState<PalioGame>('melocotogno');
   const [results, setResults] = useState<PalioEditionResultInput[]>([]);
   const [editionResults, setEditionResults] = useState<{ contrada_id: string; game: PalioGame; points: number | string | null }[]>([]);
-  const [noPlayerContradaIds, setNoPlayerContradaIds] = useState<Set<string>>(new Set());
+  const [heats, setHeats] = useState<PalioEditionHeat[]>([]);
+  const [heatGame, setHeatGame] = useState<PalioGame>('corsa');
+  const [heatSize, setHeatSize] = useState('3');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingHeats, setSavingHeats] = useState(false);
   const [creatingEdition, setCreatingEdition] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
+  const [heatsStatusMessage, setHeatsStatusMessage] = useState('');
 
   const fetchEditions = useCallback(async () => {
     const { data, error } = await supabase
@@ -75,12 +80,47 @@ function PalioResultsInputContent() {
     setEditions([...((data as PalioEdition[]) ?? [])].sort((a, b) => getPalioEditionOrder(b) - getPalioEditionOrder(a)));
   }, [supabase]);
 
+  const fetchHeats = useCallback(async (editionId: string) => {
+    if (!editionId) {
+      setHeats([]);
+      return;
+    }
+    const { data, error } = await supabase
+      .from('palio_edition_heats')
+      .select('contrada_id, game, heat_number, display_order, no_players')
+      .eq('edition_id', editionId)
+      .order('game')
+      .order('heat_number')
+      .order('display_order');
+    if (error) {
+      console.error('Error fetching palio heats:', error);
+      setHeats([]);
+      return;
+    }
+    setHeats((data as PalioEditionHeat[]) ?? []);
+  }, [supabase]);
+
+  const fetchEditionResults = useCallback(async (editionId: string) => {
+    if (!editionId) {
+      setEditionResults([]);
+      return;
+    }
+    const { data, error } = await supabase
+      .from('palio_edition_results')
+      .select('contrada_id, game, points')
+      .eq('edition_id', editionId);
+    if (error) {
+      console.error('Error fetching palio edition results:', error);
+      setEditionResults([]);
+      return;
+    }
+    setEditionResults(data ?? []);
+  }, [supabase]);
+
   useEffect(() => {
     async function loadInitialData() {
       setLoading(true);
-      const [{ data: contradeData, error: contradeError }] = await Promise.all([
-        supabase.from('contrade').select('id, name').order('name'),
-      ]);
+      const { data: contradeData, error: contradeError } = await supabase.from('contrade').select('id, name').order('name');
       if (contradeError) console.error('Error fetching contrade:', contradeError);
       setContrade((contradeData as Contrada[]) ?? []);
       await fetchEditions();
@@ -88,6 +128,11 @@ function PalioResultsInputContent() {
     }
     loadInitialData();
   }, [fetchEditions, supabase]);
+
+  useEffect(() => {
+    fetchEditionResults(selectedEditionId);
+    fetchHeats(selectedEditionId);
+  }, [fetchEditionResults, fetchHeats, selectedEditionId]);
 
   const selectedEdition = useMemo(
     () => editions.find((edition) => edition.id === selectedEditionId) ?? null,
@@ -103,59 +148,20 @@ function PalioResultsInputContent() {
   );
   const currentMonth = selectedEdition?.month ?? nextEdition.month;
   const availableGames = getAvailablePalioGamesForMonth(currentMonth);
+  // Le batterie riguardano solo le prove a tempo: melocotogno non ha
+  // batterie (si segna "senza giocatori" direttamente sui risultati) e la
+  // finale usa sempre le prime 3 classificate, senza estrazione.
+  const availableHeatGames = availableGames.filter((g) => g !== 'melocotogno' && g !== 'finale');
 
   useEffect(() => {
     if (!availableGames.includes(game)) {
       setGame(availableGames[0]);
     }
+    if (!availableHeatGames.includes(heatGame)) {
+      setHeatGame(availableHeatGames[0] ?? 'corsa');
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentMonth]);
-
-  // Risultati completi dell'edizione (tutti i giochi) — servono per calcolare
-  // i finalisti della Triplice Tenzone.
-  useEffect(() => {
-    async function fetchEditionResults() {
-      if (!selectedEditionId) {
-        setEditionResults([]);
-        return;
-      }
-      const { data, error } = await supabase
-        .from('palio_edition_results')
-        .select('contrada_id, game, points')
-        .eq('edition_id', selectedEditionId);
-      if (error) {
-        console.error('Error fetching palio edition results:', error);
-        setEditionResults([]);
-        return;
-      }
-      setEditionResults(data ?? []);
-    }
-    fetchEditionResults();
-  }, [selectedEditionId, supabase]);
-
-  // Marcature "senza giocatori" delle batterie — sola lettura: la gestione
-  // batterie resta nell'Admin del Fanta, qui rispettiamo solo il dato.
-  useEffect(() => {
-    async function fetchNoPlayers() {
-      if (!selectedEditionId) {
-        setNoPlayerContradaIds(new Set());
-        return;
-      }
-      const { data, error } = await supabase
-        .from('palio_edition_heats')
-        .select('contrada_id, game, no_players')
-        .eq('edition_id', selectedEditionId)
-        .eq('game', game)
-        .eq('no_players', true);
-      if (error) {
-        console.error('Error fetching palio heats:', error);
-        setNoPlayerContradaIds(new Set());
-        return;
-      }
-      setNoPlayerContradaIds(new Set((data ?? []).map((row) => row.contrada_id as string)));
-    }
-    fetchNoPlayers();
-  }, [game, selectedEditionId, supabase]);
 
   useEffect(() => {
     async function fetchResultsForGame() {
@@ -167,7 +173,7 @@ function PalioResultsInputContent() {
 
       const { data, error } = await supabase
         .from('palio_edition_results')
-        .select('contrada_id, position, points, notes, melocotogno_2_count, melocotogno_5_count, melocotogno_10_count, time_seconds, penalty_count, adjusted_time_seconds, final_bonus_points, is_disqualified')
+        .select('contrada_id, position, points, notes, melocotogno_2_count, melocotogno_5_count, melocotogno_10_count, time_seconds, penalty_count, adjusted_time_seconds, final_bonus_points, is_calculation_overridden, is_disqualified')
         .eq('edition_id', selectedEditionId)
         .eq('game', game);
 
@@ -185,6 +191,7 @@ function PalioResultsInputContent() {
           adjusted_time_seconds: formatPalioNumberInput(existing.adjusted_time_seconds),
           contrada_id: row.contrada_id,
           final_bonus_points: formatPalioNumberInput(existing.final_bonus_points),
+          is_calculation_overridden: Boolean(existing.is_calculation_overridden),
           is_disqualified: Boolean(existing.is_disqualified),
           melocotogno_2_count: formatPalioNumberInput(existing.melocotogno_2_count),
           melocotogno_5_count: formatPalioNumberInput(existing.melocotogno_5_count),
@@ -199,6 +206,11 @@ function PalioResultsInputContent() {
     }
     fetchResultsForGame();
   }, [contrade, game, selectedEditionId, supabase]);
+
+  const noPlayerContradaIds = useMemo(
+    () => new Set(heats.filter((heat) => heat.game === game && heat.no_players).map((heat) => heat.contrada_id)),
+    [game, heats]
+  );
 
   const preFinaleRanking = useMemo<RankingEntry[]>(() => {
     const totals = new Map<string, number>();
@@ -254,6 +266,40 @@ function PalioResultsInputContent() {
 
   function updateField(contradaId: string, field: keyof PalioEditionResultInput, value: string | boolean) {
     setResults((prev) => prev.map((row) => (row.contrada_id === contradaId ? { ...row, [field]: value } : row)));
+  }
+
+  function updateCalculationOverride(contradaId: string, enabled: boolean) {
+    setResults((prev) => {
+      const calculatedRow = calculatePalioRows(prev, game, noPlayerContradaIds).find((r) => r.contrada_id === contradaId);
+      return prev.map((row) => {
+        if (row.contrada_id !== contradaId) return row;
+        if (!enabled || !calculatedRow) {
+          return { ...row, is_calculation_overridden: false };
+        }
+        return {
+          ...row,
+          adjusted_time_seconds: calculatedRow.adjusted_time_seconds,
+          is_calculation_overridden: true,
+          points: calculatedRow.points,
+          position: calculatedRow.position,
+        };
+      });
+    });
+  }
+
+  // "Senza giocatori" per il melocotogno: non ha batterie, quindi si marca
+  // direttamente dalla riga risultati. Per le altre prove si marca dalla
+  // tabella batterie qui sotto. In entrambi i casi il dato vive in
+  // palio_edition_heats (come nell'Admin del Fanta).
+  function updateNoPlayerField(contradaId: string, targetGame: PalioGame, checked: boolean) {
+    setHeats((prev) => {
+      const existing = prev.find((heat) => heat.game === targetGame && heat.contrada_id === contradaId);
+      if (!existing) {
+        const nextDisplayOrder = Math.max(0, ...prev.filter((heat) => heat.game === targetGame).map((heat) => heat.display_order)) + 1;
+        return [...prev, { contrada_id: contradaId, display_order: nextDisplayOrder, game: targetGame, heat_number: 1, no_players: checked }];
+      }
+      return prev.map((heat) => (heat.game === targetGame && heat.contrada_id === contradaId ? { ...heat, no_players: checked } : heat));
+    });
   }
 
   async function resolveEdition(): Promise<PalioEdition | null> {
@@ -322,6 +368,7 @@ function PalioResultsInputContent() {
         edition_id: edition.id,
         final_bonus_points: parsePalioNumber(r.final_bonus_points),
         game,
+        is_calculation_overridden: r.is_calculation_overridden,
         is_disqualified: r.is_disqualified,
         melocotogno_2_count: parsePalioInteger(r.melocotogno_2_count),
         melocotogno_5_count: parsePalioInteger(r.melocotogno_5_count),
@@ -342,6 +389,29 @@ function PalioResultsInputContent() {
         return;
       }
 
+      // Marcature "senza giocatori" per questa prova (melocotogno incluso,
+      // dato che non ha una tabella batterie propria).
+      const noPlayerMarkerPayload = heats
+        .filter((heat) => heat.game === game)
+        .map((heat) => ({
+          contrada_id: heat.contrada_id,
+          display_order: heat.display_order,
+          edition_id: edition.id,
+          game,
+          heat_number: heat.heat_number,
+          no_players: heat.no_players,
+        }));
+      if (noPlayerMarkerPayload.length > 0) {
+        const { error: markerError } = await supabase
+          .from('palio_edition_heats')
+          .upsert(noPlayerMarkerPayload, { onConflict: 'edition_id,game,contrada_id' });
+        if (markerError) {
+          setStatusMessage(`Risultati salvati, ma marcatori senza giocatori non aggiornati: ${markerError.message}`);
+          return;
+        }
+        await fetchHeats(edition.id);
+      }
+
       if (game === 'finale' && finalistIds.size > 0) {
         const finalistIdsForSql = Array.from(finalistIds).join(',');
         const { error: cleanupError } = await supabase
@@ -356,9 +426,221 @@ function PalioResultsInputContent() {
         }
       }
 
+      await fetchEditionResults(edition.id);
       setStatusMessage(`Risultati ${formatPalioEditionLabel(edition)} salvati. Il ricalcolo dei punteggi Fanta si fa dal pannello Admin del Fanta.`);
     } finally {
       setSaving(false);
+    }
+  }
+
+  // ---- Gestione batterie (corsa/carriola/cerchio/torre) ----
+
+  const heatEligibleContrade = contrade;
+  const selectedHeatGameHeats = useMemo(
+    () => heats
+      .filter((heat) => heat.game === heatGame)
+      .sort((a, b) => {
+        if (a.no_players !== b.no_players) return a.no_players ? 1 : -1;
+        if (a.heat_number !== b.heat_number) return a.heat_number - b.heat_number;
+        return a.display_order - b.display_order;
+      }),
+    [heatGame, heats]
+  );
+  const selectedHeatGameHeatByContradaId = useMemo(() => {
+    const map = new Map<string, PalioEditionHeat>();
+    selectedHeatGameHeats.forEach((heat) => map.set(heat.contrada_id, heat));
+    return map;
+  }, [selectedHeatGameHeats]);
+  const heatRows = useMemo(() => {
+    const parsedHeatSize = Number.parseInt(heatSize, 10);
+    const fallbackHeatSize = Number.isNaN(parsedHeatSize) || parsedHeatSize < 2 ? 3 : parsedHeatSize;
+
+    return [...heatEligibleContrade]
+      .sort((a, b) => a.name.localeCompare(b.name, 'it'))
+      .map((contrada, index) => {
+        const existingHeat = selectedHeatGameHeatByContradaId.get(contrada.id);
+        if (existingHeat) return existingHeat;
+        return {
+          contrada_id: contrada.id,
+          display_order: (index % fallbackHeatSize) + 1,
+          game: heatGame,
+          heat_number: Math.floor(index / fallbackHeatSize) + 1,
+          no_players: false,
+        };
+      });
+  }, [heatEligibleContrade, heatGame, heatSize, selectedHeatGameHeatByContradaId]);
+
+  function updateHeatField(contradaId: string, field: 'display_order' | 'heat_number' | 'no_players', value: string | boolean) {
+    const nextValue = typeof value === 'boolean' ? value : (() => {
+      const parsed = Number.parseInt(value, 10);
+      return Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
+    })();
+
+    setHeats((prev) => {
+      const existing = prev.find((heat) => heat.game === heatGame && heat.contrada_id === contradaId);
+      if (!existing) {
+        return [...prev, {
+          contrada_id: contradaId,
+          display_order: field === 'display_order' && typeof nextValue === 'number' ? nextValue : 1,
+          game: heatGame,
+          heat_number: field === 'heat_number' && typeof nextValue === 'number' ? nextValue : 1,
+          no_players: field === 'no_players' && typeof nextValue === 'boolean' ? nextValue : false,
+        }];
+      }
+      return prev.map((heat) => (heat.game === heatGame && heat.contrada_id === contradaId ? { ...heat, [field]: nextValue } : heat));
+    });
+  }
+
+  async function upsertNoPlayerResultMarkers(editionId: string, payload: PalioEditionHeat[]) {
+    const noPlayerPayload = payload
+      .filter((heat) => heat.no_players)
+      .map((heat) => ({
+        adjusted_time_seconds: null,
+        contrada_id: heat.contrada_id,
+        edition_id: editionId,
+        final_bonus_points: null,
+        game: heatGame,
+        is_disqualified: true,
+        melocotogno_2_count: null,
+        melocotogno_5_count: null,
+        melocotogno_10_count: null,
+        notes: 'Senza giocatori',
+        penalty_count: 999,
+        points: 1,
+        position: 12,
+        time_seconds: null,
+      }));
+    if (noPlayerPayload.length === 0) return null;
+
+    const { error } = await supabase.from('palio_edition_results').upsert(noPlayerPayload, { onConflict: 'edition_id,game,contrada_id' });
+    return error;
+  }
+
+  async function handleSaveHeats() {
+    if (!selectedEditionId) {
+      setHeatsStatusMessage("Seleziona prima un'edizione");
+      return;
+    }
+    if (heatRows.length === 0) {
+      setHeatsStatusMessage('Non ci sono contrade disponibili per questo gioco');
+      return;
+    }
+
+    setSavingHeats(true);
+    try {
+      const parsedHeatSize = Number.parseInt(heatSize, 10);
+      const normalizedHeatSize = Number.isNaN(parsedHeatSize) || parsedHeatSize < 2 ? 3 : parsedHeatSize;
+      const getContradaName = (contradaId: string) => contrade.find((c) => c.id === contradaId)?.name ?? '';
+      const orderedRows = [
+        ...heatRows.filter((heat) => !heat.no_players).sort((a, b) => {
+          if (a.heat_number !== b.heat_number) return a.heat_number - b.heat_number;
+          if (a.display_order !== b.display_order) return a.display_order - b.display_order;
+          return getContradaName(a.contrada_id).localeCompare(getContradaName(b.contrada_id), 'it');
+        }),
+        ...heatRows.filter((heat) => heat.no_players).sort((a, b) => getContradaName(a.contrada_id).localeCompare(getContradaName(b.contrada_id), 'it')),
+      ];
+      const payload = orderedRows.map((heat, index) => ({
+        contrada_id: heat.contrada_id,
+        display_order: (index % normalizedHeatSize) + 1,
+        edition_id: selectedEditionId,
+        game: heatGame,
+        heat_number: Math.floor(index / normalizedHeatSize) + 1,
+        no_players: heat.no_players,
+      }));
+
+      const { error: upsertError } = await supabase.from('palio_edition_heats').upsert(payload, { onConflict: 'edition_id,game,contrada_id' });
+      if (upsertError) {
+        setHeatsStatusMessage(`Errore salvataggio batterie: ${upsertError.message}`);
+        return;
+      }
+
+      const ids = Array.from(new Set(payload.map((h) => h.contrada_id))).join(',');
+      if (ids) {
+        const { error: cleanupError } = await supabase
+          .from('palio_edition_heats')
+          .delete()
+          .eq('edition_id', selectedEditionId)
+          .eq('game', heatGame)
+          .not('contrada_id', 'in', `(${ids})`);
+        if (cleanupError) {
+          setHeatsStatusMessage(`Batterie salvate, ma pulizia non completata: ${cleanupError.message}`);
+          return;
+        }
+      }
+
+      const markerError = await upsertNoPlayerResultMarkers(selectedEditionId, payload);
+      if (markerError) {
+        setHeatsStatusMessage(`Batterie salvate, ma risultati N.A. non aggiornati: ${markerError.message}`);
+        return;
+      }
+
+      await fetchHeats(selectedEditionId);
+      await fetchEditionResults(selectedEditionId);
+      setHeatsStatusMessage(`Batterie ${liveGameLabels[heatGame]} salvate`);
+    } finally {
+      setSavingHeats(false);
+    }
+  }
+
+  async function handleGenerateHeats() {
+    if (!selectedEditionId) {
+      setHeatsStatusMessage("Seleziona prima un'edizione");
+      return;
+    }
+    const parsedHeatSize = Number.parseInt(heatSize, 10);
+    if (Number.isNaN(parsedHeatSize) || parsedHeatSize < 2) {
+      setHeatsStatusMessage('Inserisci almeno 2 contrade per batteria');
+      return;
+    }
+    if (heatEligibleContrade.length === 0) {
+      setHeatsStatusMessage('Non ci sono contrade disponibili per questo gioco');
+      return;
+    }
+
+    setSavingHeats(true);
+    try {
+      const noPlayerIds = new Set(selectedHeatGameHeats.filter((h) => h.no_players).map((h) => h.contrada_id));
+      const sorted = [...heatEligibleContrade].sort((a, b) => a.name.localeCompare(b.name, 'it'));
+      const shuffled = sorted
+        .filter((c) => !noPlayerIds.has(c.id))
+        .map((c) => ({ contrada: c, random: Math.random() }))
+        .sort((a, b) => a.random - b.random)
+        .map((item) => item.contrada);
+      const noPlayerContrade = sorted.filter((c) => noPlayerIds.has(c.id));
+      const ordered = [...shuffled, ...noPlayerContrade];
+
+      const payload = ordered.map((contrada, index) => ({
+        contrada_id: contrada.id,
+        display_order: (index % parsedHeatSize) + 1,
+        edition_id: selectedEditionId,
+        game: heatGame,
+        heat_number: Math.floor(index / parsedHeatSize) + 1,
+        no_players: noPlayerIds.has(contrada.id),
+      }));
+
+      const { error: deleteError } = await supabase.from('palio_edition_heats').delete().eq('edition_id', selectedEditionId).eq('game', heatGame);
+      if (deleteError) {
+        setHeatsStatusMessage(`Errore pulizia batterie: ${deleteError.message}`);
+        return;
+      }
+
+      const { error: insertError } = await supabase.from('palio_edition_heats').insert(payload);
+      if (insertError) {
+        setHeatsStatusMessage(`Errore estrazione batterie: ${insertError.message}`);
+        return;
+      }
+
+      const markerError = await upsertNoPlayerResultMarkers(selectedEditionId, payload);
+      if (markerError) {
+        setHeatsStatusMessage(`Batterie estratte, ma risultati N.A. non aggiornati: ${markerError.message}`);
+        return;
+      }
+
+      await fetchHeats(selectedEditionId);
+      await fetchEditionResults(selectedEditionId);
+      setHeatsStatusMessage(`Batterie ${liveGameLabels[heatGame]} estratte`);
+    } finally {
+      setSavingHeats(false);
     }
   }
 
@@ -368,10 +650,10 @@ function PalioResultsInputContent() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
-      <h1 className="font-medieval text-2xl font-bold text-stone-100">Inserimento risultati ufficiali</h1>
+      <h1 className="font-medieval text-2xl font-bold text-stone-100">Gestione risultati ufficiali</h1>
       <p className="mt-1 text-sm text-stone-400">
-        Scrive su <code>palio_edition_results</code>, la stessa tabella del pannello Admin del Fanta. Il ricalcolo dei
-        punteggi Fanta resta riservato a quel pannello.
+        Scrive su <code>palio_edition_results</code> e <code>palio_edition_heats</code>, le stesse tabelle del pannello
+        Admin del Fanta. Il ricalcolo dei punteggi Fanta resta riservato a quel pannello.
       </p>
 
       <div className="mt-6 flex flex-wrap items-center gap-3 rounded-lg border border-stone-800 bg-stone-900 p-4">
@@ -401,7 +683,111 @@ function PalioResultsInputContent() {
         )}
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      {/* ---- Batterie di partenza ---- */}
+      {availableHeatGames.length > 0 && (
+        <div className="mt-6 rounded-lg border border-stone-800 bg-stone-900 p-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-stone-300">Batterie di partenza</h2>
+          <p className="mt-1 text-sm text-stone-500">Estrai o modifica le batterie per ogni prova. La pagina /estrazioni le mostra separate.</p>
+
+          <div className="mt-4 flex flex-wrap items-end gap-3">
+            <label className="text-sm font-semibold text-stone-300">
+              Gioco
+              <select
+                value={heatGame}
+                onChange={(e) => setHeatGame(e.target.value as PalioGame)}
+                className="ml-2 rounded-md border border-stone-700 bg-stone-800 px-3 py-1.5 text-sm text-stone-100"
+              >
+                {availableHeatGames.map((g) => (
+                  <option key={g} value={g}>{liveGameLabels[g]}</option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm font-semibold text-stone-300">
+              Contrade per batteria
+              <input
+                type="number" min={2} max={heatEligibleContrade.length || 12}
+                value={heatSize}
+                onChange={(e) => setHeatSize(e.target.value)}
+                className="ml-2 w-20 rounded-md border border-stone-700 bg-stone-800 px-3 py-1.5 text-sm text-stone-100"
+              />
+            </label>
+            <button
+              type="button"
+              disabled={!selectedEditionId || savingHeats}
+              onClick={handleGenerateHeats}
+              className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              <Repeat className="h-4 w-4" />
+              Estrai
+            </button>
+            <button
+              type="button"
+              disabled={!selectedEditionId || savingHeats}
+              onClick={handleSaveHeats}
+              className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              <Save className="h-4 w-4" />
+              Salva
+            </button>
+          </div>
+
+          {heatsStatusMessage && <p className="mt-3 text-sm font-semibold text-palio-300">{heatsStatusMessage}</p>}
+
+          {heatRows.length > 0 && (
+            <div className="mt-4 overflow-hidden rounded-md border border-stone-700">
+              <div className="grid grid-cols-[minmax(0,1fr)_90px_90px_140px] gap-2 border-b border-stone-700 bg-stone-800 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-stone-400">
+                <span>Contrada</span>
+                <span>Batteria</span>
+                <span>Ordine</span>
+                <span>Assenza giocatori</span>
+              </div>
+              <div className="max-h-80 divide-y divide-stone-800 overflow-y-auto">
+                {[...heatRows]
+                  .sort((a, b) => {
+                    if (a.no_players !== b.no_players) return a.no_players ? 1 : -1;
+                    if (a.heat_number !== b.heat_number) return a.heat_number - b.heat_number;
+                    if (a.display_order !== b.display_order) return a.display_order - b.display_order;
+                    const firstName = contrade.find((c) => c.id === a.contrada_id)?.name ?? '';
+                    const secondName = contrade.find((c) => c.id === b.contrada_id)?.name ?? '';
+                    return firstName.localeCompare(secondName, 'it');
+                  })
+                  .map((heat) => {
+                    const contrada = contrade.find((c) => c.id === heat.contrada_id);
+                    return (
+                      <div key={heat.contrada_id} className="grid grid-cols-[minmax(0,1fr)_90px_90px_140px] items-center gap-2 px-3 py-2">
+                        <div className="truncate text-sm font-medium text-stone-100">{contrada?.name ?? 'Contrada'}</div>
+                        <input
+                          type="number" min={1}
+                          value={heat.heat_number}
+                          onChange={(e) => updateHeatField(heat.contrada_id, 'heat_number', e.target.value)}
+                          className="w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1 text-sm text-stone-100"
+                        />
+                        <input
+                          type="number" min={1}
+                          value={heat.display_order}
+                          onChange={(e) => updateHeatField(heat.contrada_id, 'display_order', e.target.value)}
+                          className="w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1 text-sm text-stone-100"
+                        />
+                        <label className="inline-flex items-center gap-2 text-sm font-medium text-stone-300">
+                          <input
+                            type="checkbox"
+                            checked={heat.no_players}
+                            onChange={(e) => updateHeatField(heat.contrada_id, 'no_players', e.target.checked)}
+                            className="rounded border-stone-600"
+                          />
+                          Sì
+                        </label>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ---- Risultati ---- */}
+      <div className="mt-6 flex flex-wrap gap-2">
         {availableGames.map((g) => {
           const isActive = g === game;
           const isLocked = g === 'finale' && !isFinaleReady;
@@ -466,6 +852,7 @@ function PalioResultsInputContent() {
             : game === 'finale'
               ? (row.adjusted_time_seconds ? `${row.adjusted_time_seconds}s` : 'N.A.')
               : `${row.points || '0'} pt`;
+          const heat = heats.find((h) => h.game === game && h.contrada_id === row.contrada_id);
 
           return (
             <div
@@ -474,9 +861,14 @@ function PalioResultsInputContent() {
                 isRowInvalid ? 'border-red-700' : rowStatus === 'complete' || rowStatus === 'notApplicable' ? 'border-emerald-800' : 'border-stone-700'
               }`}
             >
-              <div className="grid gap-3 lg:grid-cols-[180px_minmax(0,1fr)_140px]">
+              <div className="grid gap-3 lg:grid-cols-[180px_minmax(0,1fr)_180px]">
                 <div>
                   <div className="font-semibold text-stone-100">{contrada?.name ?? 'Contrada'}</div>
+                  {!isMelocotogno && heat && (
+                    <div className="mt-1 inline-flex rounded-full bg-blue-950/40 px-2 py-0.5 text-xs font-semibold text-blue-300">
+                      Batteria {heat.heat_number} · ordine {heat.display_order}
+                    </div>
+                  )}
                   {isNoPlayer && (
                     <div className="mt-1 inline-flex rounded-full bg-red-950/40 px-2 py-0.5 text-xs font-semibold text-red-300">
                       Senza giocatori · N.A.
@@ -484,7 +876,7 @@ function PalioResultsInputContent() {
                   )}
                 </div>
 
-                <div className={`grid gap-2 ${isMelocotogno ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
+                <div className={`grid gap-2 ${isMelocotogno ? 'sm:grid-cols-4' : 'sm:grid-cols-2'}`}>
                   {isMelocotogno ? (
                     <>
                       <label className="text-xs font-semibold text-stone-400">
@@ -513,6 +905,15 @@ function PalioResultsInputContent() {
                           onChange={(e) => updateField(row.contrada_id, 'melocotogno_10_count', e.target.value)}
                           className="mt-1 w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1.5 text-sm text-stone-100 disabled:opacity-50"
                         />
+                      </label>
+                      <label className="flex items-center gap-2 text-xs font-semibold text-stone-400">
+                        <input
+                          type="checkbox"
+                          checked={isNoPlayer}
+                          onChange={(e) => updateNoPlayerField(row.contrada_id, game, e.target.checked)}
+                          className="rounded border-stone-600"
+                        />
+                        Senza giocatori
                       </label>
                     </>
                   ) : (
@@ -546,7 +947,7 @@ function PalioResultsInputContent() {
                       </label>
                     </>
                   )}
-                  <label className={`text-xs font-semibold text-stone-400 ${isMelocotogno ? 'sm:col-span-3' : 'sm:col-span-2'}`}>
+                  <label className={`text-xs font-semibold text-stone-400 ${isMelocotogno ? 'sm:col-span-4' : 'sm:col-span-2'}`}>
                     Note
                     <input
                       value={row.notes}
@@ -556,10 +957,61 @@ function PalioResultsInputContent() {
                   </label>
                 </div>
 
-                <div className="rounded-md border border-stone-700 bg-stone-800/60 p-3 text-center">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">Calcolo</div>
-                  <div className="mt-1 text-lg font-bold text-stone-100">{scoreLabel}</div>
-                  <div className="mt-1 text-xs text-stone-400">{row.position ? `${row.position}° posizione` : 'Non calcolata'}</div>
+                <div className="rounded-md border border-stone-700 bg-stone-800/60 p-3">
+                  <div className="text-center">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                      {row.is_calculation_overridden ? 'Calcolo corretto' : 'Calcolo automatico'}
+                    </div>
+                    <div className="mt-1 text-lg font-bold text-stone-100">{scoreLabel}</div>
+                    <div className="mt-1 text-xs text-stone-400">{row.position ? `${row.position}° posizione` : 'Non calcolata'}</div>
+                  </div>
+
+                  <label className="mt-3 flex items-center gap-2 rounded-md border border-blue-900/60 bg-blue-950/30 px-2 py-1.5 text-xs font-semibold text-blue-200">
+                    <input
+                      type="checkbox"
+                      checked={row.is_calculation_overridden}
+                      disabled={isNoPlayer}
+                      onChange={(e) => updateCalculationOverride(row.contrada_id, e.target.checked)}
+                      className="rounded border-blue-700"
+                    />
+                    Correggi calcolo
+                  </label>
+
+                  {row.is_calculation_overridden && (
+                    <div className="mt-3 space-y-2 border-t border-blue-900/60 pt-3">
+                      {!isMelocotogno && !row.is_disqualified && (
+                        <label className="block text-xs font-semibold text-stone-400">
+                          Tempo corretto
+                          <input
+                            type="number" min={0} step="0.01"
+                            value={row.adjusted_time_seconds}
+                            onChange={(e) => updateField(row.contrada_id, 'adjusted_time_seconds', e.target.value)}
+                            className="mt-1 w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1.5 text-sm text-stone-100"
+                          />
+                        </label>
+                      )}
+                      <label className="block text-xs font-semibold text-stone-400">
+                        Posizione corretta
+                        <input
+                          type="number" min={1} step={1}
+                          value={row.position}
+                          onChange={(e) => updateField(row.contrada_id, 'position', e.target.value)}
+                          className="mt-1 w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1.5 text-sm text-stone-100"
+                        />
+                      </label>
+                      {game !== 'finale' && (
+                        <label className="block text-xs font-semibold text-stone-400">
+                          Punti corretti
+                          <input
+                            type="number" min={0} step="0.01"
+                            value={row.points}
+                            onChange={(e) => updateField(row.contrada_id, 'points', e.target.value)}
+                            className="mt-1 w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1.5 text-sm text-stone-100"
+                          />
+                        </label>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

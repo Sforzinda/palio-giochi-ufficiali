@@ -48,4 +48,4 @@ ufficiali pubblici (vedi discussione issue #97).
 
 - [x] `/estrazioni` — `usePalioLiveData` + `PalioDraw` (porting da fantapalio)
 - [x] `/risultati` — vista live `PalioLive`/`PalioLiveMobile` + `PalioWinnerCelebration` (porting da fantapalio, senza le sfide Fanta)
-- [ ] `/risultati` — inserimento risultati ufficiali (estratto da `Admin.tsx` di fantapalio, senza il ricalcolo punteggi Fanta)
+- [x] `/risultati/gestione` — `PalioResultsInput`: inserimento risultati ufficiali, gestione batterie (estrazione/modifica manuale) e correzione manuale del calcolo, dietro login + `can_manage_palio_games()`. Non chiama mai il ricalcolo punteggi Fanta (resta esclusivo dell'Admin del Fanta).

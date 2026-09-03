@@ -1,16 +1,15 @@
 import type { PalioEdition, PalioGame } from '../hooks/usePalioLiveData';
 import { getPalioGamesForMonth } from '../hooks/usePalioLiveData';
 
-// Porting delle funzioni pure di calcolo/validazione risultati da
-// fantapalio/src/pages/Admin.tsx (handleSavePalioResults e dintorni),
-// senza la funzionalità di "correzione manuale del calcolo" (riservata
-// agli amministratori pieni nell'Admin del Fanta) e senza la gestione
-// batterie/no-players (resta nell'Admin del Fanta).
+// Porting delle funzioni pure di calcolo/validazione risultati e gestione
+// batterie da fantapalio/src/pages/Admin.tsx (handleSavePalioResults,
+// handleSavePalioHeats, handleGeneratePalioHeats e dintorni).
 
 export interface PalioEditionResultInput {
   contrada_id: string;
   adjusted_time_seconds: string;
   final_bonus_points: string;
+  is_calculation_overridden: boolean;
   is_disqualified: boolean;
   melocotogno_2_count: string;
   melocotogno_5_count: string;
@@ -116,6 +115,21 @@ const rankPalioValues = (
   return ranks;
 };
 
+const applyPalioCalculationOverride = <T extends Pick<PalioEditionResultInput, 'adjusted_time_seconds' | 'points' | 'position'>>(
+  source: PalioEditionResultInput,
+  calculated: T,
+  game: PalioGame
+): T => {
+  if (!source.is_calculation_overridden) return calculated;
+
+  return {
+    ...calculated,
+    adjusted_time_seconds: game === 'melocotogno' ? calculated.adjusted_time_seconds : source.adjusted_time_seconds,
+    points: game === 'finale' ? calculated.points : source.points,
+    position: source.position
+  };
+};
+
 export function calculatePalioRows(
   rows: PalioEditionResultInput[],
   game: PalioGame,
@@ -157,14 +171,14 @@ export function calculatePalioRows(
       const points = position === null ? null : 13 - position;
       const total = totals.find((item) => item.contrada_id === row.contrada_id)?.value ?? null;
 
-      return {
+      return applyPalioCalculationOverride(row, {
         ...row,
         adjusted_time_seconds: '',
         final_bonus_points: '',
         position: position === null ? '' : String(position),
         points: points === null ? '' : String(points),
         total
-      };
+      }, game);
     });
   }
 
@@ -184,14 +198,14 @@ export function calculatePalioRows(
       const adjustedTime = adjustedTimes.find((item) => item.contrada_id === row.contrada_id)?.value ?? null;
       const position = ranks.get(row.contrada_id) ?? null;
 
-      return {
+      return applyPalioCalculationOverride(row, {
         ...row,
         adjusted_time_seconds: adjustedTime === null || adjustedTime >= 999 ? '' : String(Number(adjustedTime.toFixed(2))),
         final_bonus_points: '',
         position: position === null ? '' : String(position),
         points: '',
         total: adjustedTime
-      };
+      }, game);
     });
   }
 
@@ -212,14 +226,14 @@ export function calculatePalioRows(
     const position = ranks.get(row.contrada_id) ?? null;
     const points = position === null ? null : 13 - position;
 
-    return {
+    return applyPalioCalculationOverride(row, {
       ...row,
       adjusted_time_seconds: adjustedTime === null || adjustedTime >= 999 ? '' : String(Number(adjustedTime.toFixed(2))),
       final_bonus_points: '',
       position: position === null ? '' : String(position),
       points: points === null ? '' : String(points),
       total: adjustedTime
-    };
+    }, game);
   });
 }
 
