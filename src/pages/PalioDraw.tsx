@@ -112,6 +112,13 @@ function getActiveDrawGroup(groups: DrawGameGroup[], visibleCount: number): Draw
   return groups.find((group) => visibleCount > group.startIndex && visibleCount <= group.endIndex) ?? groups[groups.length - 1];
 }
 
+function getProgrammaGridSize(stepCount: number) {
+  const columns = stepCount > 18 ? 4 : stepCount > 12 ? 3 : stepCount > 6 ? 2 : 1;
+  const rows = Math.max(Math.ceil(stepCount / columns), 1);
+
+  return { columns, rows };
+}
+
 function groupStepsByHeat(steps: DrawStep[]) {
   return Array.from(new Set(steps.map((step) => step.heatNumber)))
     .map((heatNumber) => ({
@@ -162,36 +169,39 @@ function PalioGameSummary({
           </div>
         </div>
 
-        <div className="mt-8 min-h-0 flex-1 overflow-y-auto pr-1">
-          <div className="grid gap-4 lg:grid-cols-4">
+        <div className="mt-8 flex-1">
+          <div
+            className="grid h-full gap-3"
+            style={{ gridTemplateColumns: `repeat(${Math.max(heatGroups.length, 1)}, minmax(0, 1fr))` }}
+          >
             {heatGroups.map((heatGroup) => (
               <div
                 key={heatGroup.heatNumber}
-                className="rounded-[1.5rem] border border-amber-100/24 bg-[#f6ead2] p-4 text-[#2a1309] shadow-2xl shadow-black/30"
+                className="flex flex-col rounded-[1.5rem] border border-amber-100/24 bg-[#f6ead2] p-3 text-[#2a1309] shadow-2xl shadow-black/30"
               >
-                <div className="border-b border-[#2a1309]/12 pb-3">
-                  <div className="text-xs font-black uppercase tracking-[0.26em] text-[#92400e]">Batteria</div>
-                  <h3 className="mt-1 text-4xl font-black leading-none">{heatGroup.heatNumber}</h3>
+                <div className="border-b border-[#2a1309]/12 pb-2">
+                  <div className="truncate text-[10px] font-black uppercase tracking-[0.2em] text-[#92400e]">Batteria</div>
+                  <h3 className="mt-1 text-2xl font-black leading-none">{heatGroup.heatNumber}</h3>
                 </div>
-                <div className="mt-4 space-y-3">
+                <div className="mt-3 space-y-2">
                   {heatGroup.items.map((step) => {
                     const stemma = getContradaStemma(step.contrada?.name);
 
                     return (
-                    <div key={step.stepKey} className="grid grid-cols-[42px_minmax(0,1fr)] items-center gap-3 rounded-2xl bg-[#2a1309]/8 px-3 py-2">
-                      <span className="grid h-10 w-10 place-items-center rounded-full bg-[#2a1309] text-lg font-black text-amber-100">
+                    <div key={step.stepKey} className="grid grid-cols-[30px_minmax(0,1fr)] items-center gap-2 rounded-xl bg-[#2a1309]/8 px-2 py-1.5">
+                      <span className="grid h-7 w-7 place-items-center rounded-full bg-[#2a1309] text-sm font-black text-amber-100">
                         {step.displayOrder}
                       </span>
-                      <div className="flex min-w-0 items-center gap-2">
-                        {stemma && (
-                          <img src={stemma} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-[#2a1309]/20" />
-                        )}
-                        <div className="min-w-0">
-                          <div className="truncate text-xl font-black leading-tight">{step.contrada?.name ?? 'Contrada'}</div>
-                          {step.isUnavailable && (
-                            <div className="mt-0.5 text-xs font-black uppercase tracking-[0.18em] text-red-700">N.A.</div>
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          {stemma && (
+                            <img src={stemma} alt="" className="h-5 w-5 shrink-0 rounded-full object-cover ring-1 ring-[#2a1309]/20" />
                           )}
+                          <div className="truncate text-sm font-black leading-tight">{step.contrada?.name ?? 'Contrada'}</div>
                         </div>
+                        {step.isUnavailable && (
+                          <div className="mt-0.5 text-[10px] font-black uppercase tracking-[0.14em] text-red-700">N.A.</div>
+                        )}
                       </div>
                     </div>
                     );
@@ -324,27 +334,30 @@ function PalioTotalSummary({
                 </div>
               </div>
 
-              <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
-                <div className="grid gap-3 lg:grid-cols-2">
+              <div className="mt-4 flex-1">
+                <div
+                  className="grid h-full gap-2"
+                  style={{ gridTemplateColumns: `repeat(${Math.max(heatGroups.length, 1)}, minmax(0, 1fr))` }}
+                >
                   {heatGroups.map((heatGroup) => (
-                    <div key={heatGroup.heatNumber} className="rounded-2xl border border-amber-100/16 bg-black/24 p-3">
-                      <div className="border-b border-amber-100/10 pb-2">
-                        <div className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-100/52">
+                    <div key={heatGroup.heatNumber} className="flex flex-col rounded-2xl border border-amber-100/16 bg-black/24 p-2">
+                      <div className="border-b border-amber-100/10 pb-1.5">
+                        <div className="truncate text-[9px] font-black uppercase tracking-[0.18em] text-amber-100/52">
                           Batteria {heatGroup.heatNumber}
                         </div>
                       </div>
-                      <div className="mt-3 space-y-1.5">
+                      <div className="mt-1.5 space-y-1">
                         {heatGroup.items.map((step) => {
                           const stemma = getContradaStemma(step.contrada?.name);
 
                           return (
-                          <div key={step.stepKey} className="grid grid-cols-[24px_minmax(0,1fr)] items-center gap-2 rounded-xl bg-amber-50/8 px-2 py-1.5">
-                            <span className="text-sm font-black text-amber-200">{step.displayOrder}</span>
-                            <span className="flex min-w-0 items-center gap-1.5">
+                          <div key={step.stepKey} className="grid grid-cols-[18px_minmax(0,1fr)] items-center gap-1.5 rounded-lg bg-amber-50/8 px-1.5 py-1">
+                            <span className="text-xs font-black text-amber-200">{step.displayOrder}</span>
+                            <span className="flex min-w-0 items-center gap-1">
                               {stemma && (
-                                <img src={stemma} alt="" className="h-5 w-5 shrink-0 rounded-full object-cover ring-1 ring-amber-200/30" />
+                                <img src={stemma} alt="" className="h-4 w-4 shrink-0 rounded-full object-cover ring-1 ring-amber-200/30" />
                               )}
-                              <span className="truncate text-sm font-black text-amber-50 sm:text-base">
+                              <span className="truncate text-[11px] font-black text-amber-50 sm:text-xs">
                                 {step.contrada?.name ?? 'Contrada'}
                               </span>
                             </span>
@@ -890,6 +903,7 @@ export function PalioDraw() {
     ? Math.min(Math.max(visibleCount - activeGroup.startIndex, 0), activeGroup.steps.length)
     : 0;
   const groupIsComplete = !!activeGroup && activeGroupVisibleCount >= activeGroup.steps.length;
+  const { columns: programmaColumns, rows: programmaRows } = getProgrammaGridSize(activeGroup?.steps.length ?? 0);
   const activeStep = visibleCount > 0 ? drawSteps[visibleCount - 1] ?? null : null;
   const [showGameSummary, setShowGameSummary] = useState(false);
   const displayedStep = showGameSummary && groupIsComplete ? null : activeStep;
@@ -1087,7 +1101,14 @@ export function PalioDraw() {
                     </div>
                     <img src={sforzindaLogo} alt="Sforzinda" className="h-11 w-11 object-contain" />
                   </div>
-                  <div className="mt-3 space-y-2 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
+                  <div
+                    className="mt-3 grid gap-2 lg:min-h-0 lg:flex-1"
+                    style={{
+                      gridAutoFlow: 'column',
+                      gridTemplateColumns: `repeat(${programmaColumns}, minmax(0, 1fr))`,
+                      gridTemplateRows: `repeat(${programmaRows}, minmax(0, 1fr))`
+                    }}
+                  >
                     {(activeGroup?.steps ?? []).map((step, index) => {
                       const globalIndex = (activeGroup?.startIndex ?? 0) + index;
                       const isRevealed = globalIndex < visibleCount;
@@ -1096,7 +1117,7 @@ export function PalioDraw() {
 
                       return (
                         <div
-                          className={`grid grid-cols-[34px_minmax(0,1fr)_76px] items-center gap-2.5 rounded-xl border px-3 py-2 transition duration-500 ${
+                          className={`grid min-h-0 grid-cols-[28px_minmax(0,1fr)] items-center gap-2 rounded-xl border px-2.5 py-1.5 transition duration-500 ${
                             isCurrent
                               ? 'border-amber-100/60 bg-amber-100/20 text-amber-50'
                               : isRevealed
@@ -1105,22 +1126,19 @@ export function PalioDraw() {
                           }`}
                           key={step.stepKey}
                         >
-                          <span className="text-lg font-black text-amber-200">{step.displayOrder}</span>
-                          <span className="flex min-w-0 items-center gap-2">
+                          <span className="text-sm font-black text-amber-200">{step.displayOrder}</span>
+                          <span className="flex min-w-0 items-center gap-1.5">
                             {stemma && (
-                              <img src={stemma} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover ring-1 ring-amber-100/30" />
+                              <img src={stemma} alt="" className="h-6 w-6 shrink-0 rounded-full object-cover ring-1 ring-amber-100/30" />
                             )}
                             <span className="min-w-0">
-                              <span className="block truncate text-base font-black leading-tight">
+                              <span className="block truncate text-sm font-black leading-tight">
                                 {isRevealed ? step.contrada?.name ?? 'Contrada' : 'Sigillo chiuso'}
                               </span>
-                              <span className="block truncate text-[10px] font-bold uppercase tracking-[0.14em] text-amber-100/50">
-                                {palioGameLabels[step.game]} · Batteria {step.heatNumber}
+                              <span className="block truncate text-[9px] font-bold uppercase tracking-[0.12em] text-amber-100/50">
+                                Batteria {step.heatNumber} · {isRevealed ? 'Estratta' : 'Attesa'}
                               </span>
                             </span>
-                          </span>
-                          <span className="text-right text-[11px] font-black uppercase tracking-[0.12em] text-amber-100/58">
-                            {isRevealed ? 'Estratta' : 'Attesa'}
                           </span>
                         </div>
                       );

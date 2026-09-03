@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { Award, Crown, Flag, Sparkles } from 'lucide-react';
+import { Crown, Flag, Sparkles } from 'lucide-react';
 import { getResultValue, type PalioEditionResult, type RankingItem } from '../hooks/usePalioLiveData';
 import sforzindaLogo from '../assets/sforzinda-logo-inverted.png';
 import { getContradaStemma } from '../lib/contrada-stemmi';
@@ -101,22 +101,8 @@ export function PalioWinnerCelebration({ result, variant = 'desktop', winner }: 
         ))}
       </div>
 
-      <div className={`relative z-10 ${isMobile ? 'mx-auto flex h-full min-h-0 max-w-md flex-col items-center justify-center px-1' : 'm-auto grid h-full min-h-0 w-full max-w-6xl grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1fr)] items-center gap-6 lg:gap-8'}`}>
-        <div className={`fp-palio-winner-side-panel ${isMobile ? 'hidden' : 'flex'}`}>
-          <div className="fp-palio-winner-side-badge">
-            <Award className="h-7 w-7 text-amber-200" />
-          </div>
-          <div className="mt-5 text-xs font-black uppercase tracking-[0.28em] text-amber-200/70">
-            Contrada
-            <br />
-            vincitrice
-          </div>
-          <p className="mt-4 max-w-[18ch] text-sm font-semibold leading-6 text-amber-100/80">
-            La fascia del Palio passa alla contrada che ha chiuso davanti a tutte.
-          </p>
-        </div>
-
-        <div className="relative flex min-w-0 flex-col items-center justify-center px-1">
+      <div className={`relative z-10 mx-auto flex h-full min-h-0 w-full flex-col items-center justify-center ${isMobile ? 'max-w-md px-1' : 'max-w-4xl'}`}>
+        <div className="relative flex min-w-0 w-full flex-col items-center justify-center px-1">
           <div className="fp-palio-winner-seal mx-auto flex items-center justify-center overflow-hidden rounded-full border border-amber-200/60 bg-amber-100/15 shadow-xl shadow-amber-950/40">
             {winnerStemma ? (
               <img src={winnerStemma} alt={winner.name} className="h-full w-full object-cover" />
@@ -176,20 +162,6 @@ export function PalioWinnerCelebration({ result, variant = 'desktop', winner }: 
               <div className="mt-1 text-xl font-black text-amber-100 sm:text-2xl">{winner.totalPoints.toLocaleString('it-IT')} pt</div>
             </div>
           </div>
-        </div>
-
-        <div className={`fp-palio-winner-side-panel ${isMobile ? 'hidden' : 'flex'}`}>
-          <div className="fp-palio-winner-side-badge">
-            <Crown className="h-7 w-7 text-amber-200" />
-          </div>
-          <div className="mt-5 text-xs font-black uppercase tracking-[0.28em] text-amber-200/70">
-            Classifica
-            <br />
-            pre-finale
-          </div>
-          <p className="mt-4 max-w-[18ch] text-sm font-semibold leading-6 text-amber-100/80">
-            Il punteggio che portava la contrada al momento della finale resta in evidenza.
-          </p>
         </div>
       </div>
     </section>
