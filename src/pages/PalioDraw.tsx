@@ -183,22 +183,25 @@ function PalioGameSummary({
                   <div className="truncate text-[10px] font-black uppercase tracking-[0.2em] text-[#92400e]">Batteria</div>
                   <h3 className="mt-1 text-2xl font-black leading-none">{heatGroup.heatNumber}</h3>
                 </div>
-                <div className="mt-3 space-y-2">
+                <div className="mt-3 flex flex-1 flex-col gap-2">
                   {heatGroup.items.map((step) => {
                     const stemma = getContradaStemma(step.contrada?.name);
 
                     return (
-                    <div key={step.stepKey} className="grid grid-cols-[30px_minmax(0,1fr)] items-center gap-2 rounded-xl bg-[#2a1309]/8 px-2 py-1.5">
-                      <span className="grid h-7 w-7 place-items-center rounded-full bg-[#2a1309] text-sm font-black text-amber-100">
+                    <div
+                      key={step.stepKey}
+                      className="flex flex-1 items-center gap-2.5 overflow-hidden rounded-xl bg-[#2a1309]/8 bg-cover bg-center px-3"
+                      style={
+                        stemma
+                          ? { backgroundImage: `linear-gradient(90deg, rgba(246,234,210,.92), rgba(246,234,210,.55)), url(${stemma})` }
+                          : undefined
+                      }
+                    >
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#2a1309] text-sm font-black text-amber-100">
                         {step.displayOrder}
                       </span>
-                      <div className="min-w-0">
-                        <div className="flex min-w-0 items-center gap-1.5">
-                          {stemma && (
-                            <img src={stemma} alt="" className="h-5 w-5 shrink-0 rounded-full object-cover ring-1 ring-[#2a1309]/20" />
-                          )}
-                          <div className="truncate text-sm font-black leading-tight">{step.contrada?.name ?? 'Contrada'}</div>
-                        </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-lg font-black leading-tight sm:text-xl lg:text-2xl">{step.contrada?.name ?? 'Contrada'}</div>
                         {step.isUnavailable && (
                           <div className="mt-0.5 text-[10px] font-black uppercase tracking-[0.14em] text-red-700">N.A.</div>
                         )}
