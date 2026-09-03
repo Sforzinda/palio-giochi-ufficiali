@@ -134,6 +134,7 @@ function PalioResultsInputContent() {
   const [statusMessage, setStatusMessage] = useState('');
   const [heatsStatusMessage, setHeatsStatusMessage] = useState('');
   const [activeSection, setActiveSection] = useState<'estrazioni' | 'giochi'>('estrazioni');
+  const [resultsSortMode, setResultsSortMode] = useState<'alfabetico' | 'batteria' | 'corsia'>('alfabetico');
 
   const fetchEditions = useCallback(async () => {
     const { data, error } = await supabase
@@ -338,21 +339,41 @@ function PalioResultsInputContent() {
     () => calculatePalioRows(results, game, noPlayerContradaIds),
     [game, noPlayerContradaIds, results]
   );
+  // Per carriola/cerchio/torre/corsa l'ordine di inserimento può seguire le
+  // batterie estratte (per numero di batteria, o per corsia trasversalmente
+  // alle batterie); la finale non ha batterie/corsie reali e mantiene sempre
+  // il suo ordine pseudo-casuale stabile.
+  const canChooseResultsSortMode = game !== 'melocotogno' && game !== 'finale';
   const displayRows = useMemo(() => {
     const finalistIds = new Set(finalists.map((item) => item.contradaId));
     const rows = game === 'finale' ? calculatedRows.filter((row) => finalistIds.has(row.contrada_id)) : calculatedRows;
+    const getHeat = (contradaId: string) => heats.find((h) => h.game === game && h.contrada_id === contradaId);
+    const getName = (contradaId: string) => contrade.find((c) => c.id === contradaId)?.name ?? '';
 
     return [...rows].sort((a, b) => {
       if (game === 'finale') {
         const firstOrder = getStablePalioRandomOrder(`${selectedEditionId}-${a.contrada_id}`);
         const secondOrder = getStablePalioRandomOrder(`${selectedEditionId}-${b.contrada_id}`);
         if (firstOrder !== secondOrder) return firstOrder - secondOrder;
+      } else if (resultsSortMode === 'batteria' || resultsSortMode === 'corsia') {
+        const firstHeat = getHeat(a.contrada_id);
+        const secondHeat = getHeat(b.contrada_id);
+        const firstHeatNumber = firstHeat?.heat_number ?? Number.POSITIVE_INFINITY;
+        const secondHeatNumber = secondHeat?.heat_number ?? Number.POSITIVE_INFINITY;
+        const firstDisplayOrder = firstHeat?.display_order ?? Number.POSITIVE_INFINITY;
+        const secondDisplayOrder = secondHeat?.display_order ?? Number.POSITIVE_INFINITY;
+
+        if (resultsSortMode === 'batteria') {
+          if (firstHeatNumber !== secondHeatNumber) return firstHeatNumber - secondHeatNumber;
+          if (firstDisplayOrder !== secondDisplayOrder) return firstDisplayOrder - secondDisplayOrder;
+        } else {
+          if (firstDisplayOrder !== secondDisplayOrder) return firstDisplayOrder - secondDisplayOrder;
+          if (firstHeatNumber !== secondHeatNumber) return firstHeatNumber - secondHeatNumber;
+        }
       }
-      const firstName = contrade.find((c) => c.id === a.contrada_id)?.name ?? '';
-      const secondName = contrade.find((c) => c.id === b.contrada_id)?.name ?? '';
-      return firstName.localeCompare(secondName, 'it');
+      return getName(a.contrada_id).localeCompare(getName(b.contrada_id), 'it');
     });
-  }, [calculatedRows, contrade, finalists, game, selectedEditionId]);
+  }, [calculatedRows, contrade, finalists, game, heats, resultsSortMode, selectedEditionId]);
 
   const validation = useMemo(
     () => validatePalioRows(displayRows, game, noPlayerContradaIds),
@@ -1168,7 +1189,7 @@ function PalioResultsInputContent() {
                   <div className="grid grid-cols-[minmax(0,1fr)_90px_90px_140px] gap-2 border-b border-stone-700 bg-stone-800 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-stone-400">
                     <span>Contrada</span>
                     <span>Batteria</span>
-                    <span>Ordine</span>
+                    <span>Corsia</span>
                     <span>Assenza giocatori</span>
                   </div>
                   <div className="max-h-80 divide-y divide-stone-800 overflow-y-auto">
@@ -1300,6 +1321,30 @@ function PalioResultsInputContent() {
             </div>
             <p className="mt-2 text-sm text-stone-400">{palioGameDescriptions[game]}</p>
 
+            {canChooseResultsSortMode && (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Ordina per</span>
+                {([
+                  { mode: 'alfabetico' as const, label: 'Alfabetico' },
+                  { mode: 'batteria' as const, label: 'Batteria' },
+                  { mode: 'corsia' as const, label: 'Corsia' },
+                ]).map(({ mode, label }) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setResultsSortMode(mode)}
+                    className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                      resultsSortMode === mode
+                        ? 'border-palio-500 bg-palio-500 text-white'
+                        : 'border-stone-700 bg-stone-900 text-stone-300 hover:border-palio-400'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div
               className={`mt-4 grid gap-3 rounded-lg border p-4 sm:grid-cols-3 ${
                 validation.invalidCount > 0
@@ -1357,7 +1402,7 @@ function PalioResultsInputContent() {
                         <div className="font-semibold text-stone-100">{contrada?.name ?? 'Contrada'}</div>
                         {!isMelocotogno && heat && (
                           <div className="mt-1 inline-flex rounded-full bg-blue-950/40 px-2 py-0.5 text-xs font-semibold text-blue-300">
-                            Batteria {heat.heat_number} · ordine {heat.display_order}
+                            Batteria {heat.heat_number} · corsia {heat.display_order}
                           </div>
                         )}
                         {isNoPlayer && (
