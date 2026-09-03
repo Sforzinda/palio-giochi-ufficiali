@@ -848,8 +848,8 @@ export function PalioDraw() {
   }, [lastGameIsComplete, showGameSummary, visibleCount]);
 
   return (
-    <div className="min-h-screen overflow-hidden bg-[#160b06] text-stone-50">
-      <div className="fp-draw-stage relative min-h-screen px-4 py-5 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#160b06] text-stone-50 lg:h-screen lg:overflow-hidden">
+      <div className="fp-draw-stage relative min-h-screen px-4 py-5 sm:px-6 lg:flex lg:h-full lg:flex-col lg:overflow-hidden lg:px-8">
         <div className="pointer-events-none absolute inset-0 fp-draw-veil" />
         <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-amber-200/16 to-transparent" />
         <div className="pointer-events-none absolute -left-24 top-20 h-72 w-72 rounded-full bg-orange-500/20 blur-3xl fp-draw-orb-one" />
@@ -867,7 +867,7 @@ export function PalioDraw() {
           </div>
         </header>
 
-        <main className="relative z-10 mx-auto mt-6 grid max-w-7xl gap-5 lg:grid-cols-[minmax(0,1.08fr)_minmax(360px,0.92fr)]">
+        <main className="relative z-10 mx-auto mt-6 grid max-w-7xl gap-5 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1.08fr)_minmax(360px,0.92fr)]">
           {loading ? (
             <section className="flex min-h-[72vh] items-center justify-center rounded-[2rem] border border-amber-100/20 bg-black/28 text-xl font-black text-amber-100">
               Caricamento estrazioni...
@@ -979,8 +979,8 @@ export function PalioDraw() {
                 </div>
               </section>
 
-              <aside className="grid content-start gap-4">
-                <section className="rounded-[1.5rem] border border-amber-100/20 bg-black/26 p-3 shadow-xl shadow-black/20">
+              <aside className="grid content-start gap-4 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:overflow-hidden">
+                <section className="rounded-[1.5rem] border border-amber-100/20 bg-black/26 p-3 shadow-xl shadow-black/20 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <div className="text-xs font-black uppercase tracking-[0.24em] text-amber-100/55">Programma</div>
@@ -993,7 +993,7 @@ export function PalioDraw() {
                     </div>
                     <img src={sforzindaLogo} alt="Sforzinda" className="h-9 w-9 object-contain" />
                   </div>
-                  <div className="mt-3 space-y-1.5">
+                  <div className="mt-3 space-y-1.5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
                     {(activeGroup?.steps ?? []).map((step, index) => {
                       const globalIndex = (activeGroup?.startIndex ?? 0) + index;
                       const isRevealed = globalIndex < visibleCount;
