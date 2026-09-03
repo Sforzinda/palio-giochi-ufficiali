@@ -1,5 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle, Clock, Eye, EyeOff, Flag, PlusCircle, Repeat, RotateCcw, Save, Send } from 'lucide-react';
+import { AlertCircle, CheckCircle, Clock, Eye, EyeOff, Flag, PlusCircle, Repeat, RotateCcw, Save, Send, Trophy } from 'lucide-react';
 import { getSupabaseClient } from '../config';
 import { PalioAuthGate } from './PalioAuthGate';
 import {
