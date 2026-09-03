@@ -8,16 +8,13 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger fantapalio submodule update
-        uses: peter-evans/repository-dispatch@v3
-        with:
-          token: ${{ secrets.CONSUMER_REPOS_PAT }}
-          repository: Sforzinda/fantapalio
-          event-type: palio-giochi-ufficiali-updated
-
       - name: Trigger palio-giochi-sito submodule update
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.CONSUMER_REPOS_PAT }}
           repository: Sforzinda/palio-giochi-sito
           event-type: palio-giochi-ufficiali-updated
+
+      # fantapalio non consuma ancora questo package (fase 4 del piano issue #97).
+      # Quando verrà rifattorizzato per usarlo, aggiungere qui lo stesso step
+      # puntato a Sforzinda/fantapalio, sul modello di quanto fa palio-games.
