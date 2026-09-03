@@ -151,7 +151,7 @@ function PalioResultsInputContent() {
   // Le batterie riguardano solo le prove a tempo: melocotogno non ha
   // batterie (si segna "senza giocatori" direttamente sui risultati) e la
   // finale usa sempre le prime 3 classificate, senza estrazione.
-  const availableHeatGames = availableGames.filter((g) => g !== 'melocotogno' && g !== 'finale');
+  const availableHeatGames: PalioGame[] = availableGames.filter((g) => g !== 'melocotogno' && g !== 'finale');
 
   useEffect(() => {
     if (!availableGames.includes(game)) {
