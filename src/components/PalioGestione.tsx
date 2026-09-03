@@ -73,6 +73,7 @@ function PalioResultsInputContent() {
   const [creatingEdition, setCreatingEdition] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [heatsStatusMessage, setHeatsStatusMessage] = useState('');
+  const [activeSection, setActiveSection] = useState<'estrazioni' | 'giochi'>('estrazioni');
 
   const fetchEditions = useCallback(async () => {
     const { data, error } = await supabase
@@ -890,10 +891,10 @@ function PalioResultsInputContent() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
-      <h1 className="font-medieval text-2xl font-bold text-stone-100">Gestione risultati ufficiali</h1>
+      <h1 className="font-medieval text-2xl font-bold text-stone-100">Gestione Palio</h1>
       <p className="mt-1 text-sm text-stone-400">
-        Scrive su <code>palio_edition_results</code> e <code>palio_edition_heats</code>, le stesse tabelle del pannello
-        Admin del Fanta. Il ricalcolo dei punteggi Fanta resta riservato a quel pannello.
+        Scrive su <code>palio_edition_results</code>, <code>palio_edition_heats</code> e <code>palio_live_controls</code>,
+        le stesse tabelle del pannello Admin del Fanta. Il ricalcolo dei punteggi Fanta resta riservato a quel pannello.
       </p>
 
       <div className="mt-6 flex flex-wrap items-center gap-3 rounded-lg border border-stone-800 bg-stone-900 p-4">
@@ -921,25 +922,12 @@ function PalioResultsInputContent() {
             Crea edizione
           </button>
         )}
-      </div>
-
-      {/* ---- Regia diretta pubblica ---- */}
-      <div className="mt-6 rounded-lg border border-amber-800/50 bg-amber-950/20 p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-amber-300">Regia diretta pubblica</h2>
-            <p className="mt-1 text-sm text-amber-100/70">
-              Decide cosa mostrare su /estrazioni e /risultati per l&apos;edizione selezionata.
-            </p>
-          </div>
+        <div className="ml-auto flex items-center gap-3">
           <div className={`rounded-md px-3 py-2 text-sm font-semibold ${activeLiveControl ? 'bg-emerald-950/40 text-emerald-300' : 'bg-stone-800 text-stone-400'}`}>
             {activeLiveControl
               ? `Diretta attiva: ${formatPalioEditionLabel(editions.find((edition) => edition.id === activeLiveControl.edition_id) ?? nextEdition)}`
               : 'Diretta non attiva'}
           </div>
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-3">
           <button
             type="button"
             disabled={!selectedEditionId || savingLiveField === 'is_active'}
@@ -952,10 +940,9 @@ function PalioResultsInputContent() {
             {selectedLiveControl?.is_active ? 'Disattiva diretta' : 'Attiva questa edizione'}
           </button>
         </div>
-
         <form
           onSubmit={(e) => { e.preventDefault(); handleSaveLiveTitle(); }}
-          className="mt-4 flex flex-wrap items-end gap-3"
+          className="flex w-full flex-wrap items-end gap-3"
         >
           <label className="text-sm font-semibold text-stone-300">
             Nome mostrato nella diretta
@@ -976,461 +963,496 @@ function PalioResultsInputContent() {
             Salva nome
           </button>
         </form>
-
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          {([
-            { field: 'show_heats' as const, label: 'Batterie' },
-            { field: 'show_games' as const, label: 'Risultati prove' },
-            { field: 'show_partial_ranking' as const, label: 'Classifica parziale' },
-            { field: 'show_total_ranking' as const, label: 'Classifica finale' },
-          ]).map(({ field, label }) => {
-            const isVisible = selectedLiveControl?.[field] ?? (field === 'show_heats' ? false : true);
-            return (
-              <button
-                key={field}
-                type="button"
-                disabled={!selectedEditionId || savingLiveField === field}
-                onClick={() => handleToggleLiveSection(field)}
-                className="flex items-center justify-between rounded-md border border-stone-700 bg-stone-900 px-3 py-2 text-sm font-medium text-stone-200 transition hover:border-amber-500 disabled:opacity-50"
-              >
-                {label}
-                {isVisible ? <Eye className="h-4 w-4 text-emerald-400" /> : <EyeOff className="h-4 w-4 text-stone-500" />}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="mt-5 rounded-md border border-blue-900/60 bg-blue-950/20 p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-blue-300">
-                <Send className="h-4 w-4" />
-                Regia estrazioni
-              </h3>
-              <p className="mt-1 text-sm font-semibold text-blue-100">Inviate {revealedDrawCount}/{drawableHeatCount} estrazioni</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                disabled={!selectedEditionId || savingLiveField === 'draw_revealed_count' || drawableHeatCount === 0}
-                onClick={() => handleSetDrawRevealedCount(0)}
-                className="inline-flex items-center gap-1.5 rounded-md border border-blue-700 px-3 py-1.5 text-sm font-semibold text-blue-200 hover:border-blue-400 disabled:opacity-50"
-              >
-                <RotateCcw className="h-4 w-4" />
-                Reset
-              </button>
-              <button
-                type="button"
-                disabled={!selectedEditionId || savingLiveField === 'draw_revealed_count' || drawableHeatCount === 0 || revealedDrawCount >= drawableHeatCount}
-                onClick={() => handleSetDrawRevealedCount(revealedDrawCount + 1)}
-                className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-              >
-                <Send className="h-4 w-4" />
-                Invia prossima
-              </button>
-              <button
-                type="button"
-                disabled={!selectedEditionId || savingLiveField === 'draw_revealed_count' || drawableHeatCount === 0}
-                onClick={() => handleSetDrawRevealedCount(drawableHeatCount)}
-                className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-              >
-                <Flag className="h-4 w-4" />
-                Invia tutte
-              </button>
-            </div>
-          </div>
-          {drawableHeatCount === 0 && (
-            <p className="mt-3 text-sm text-blue-100/70">
-              Nessuna batteria estratta per Corsa/Carriole/Cerchio/Torre. Melocotogno e Triplice Tenzone non vengono inviate qui.
-            </p>
-          )}
-        </div>
-
-        {currentMonth === 'ottobre' && (
-          <form
-            onSubmit={(e) => { e.preventDefault(); handleSaveTripliceWinner(); }}
-            className="mt-4 flex flex-wrap items-end gap-3 rounded-md border border-yellow-800/50 bg-yellow-950/20 p-4"
-          >
-            <label className="text-sm font-semibold text-stone-300">
-              Vincitore Triplice Tenzone
-              <select
-                value={tripliceWinnerId}
-                onChange={(e) => setTripliceWinnerId(e.target.value)}
-                className="ml-2 rounded-md border border-stone-700 bg-stone-800 px-3 py-1.5 text-sm text-stone-100"
-              >
-                <option value="">Non decretato</option>
-                {finalists.map((item) => (
-                  <option key={item.contradaId} value={item.contradaId}>
-                    {contrade.find((c) => c.id === item.contradaId)?.name ?? item.contradaId}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="submit"
-              disabled={!selectedEditionId || savingLiveField === 'triplice_winner'}
-              className="inline-flex items-center gap-1.5 rounded-md bg-yellow-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-yellow-700 disabled:opacity-50"
-            >
-              <Save className="h-4 w-4" />
-              Conferma
-            </button>
-          </form>
-        )}
-
-        {regiaStatusMessage && <p className="mt-3 text-sm font-semibold text-amber-300">{regiaStatusMessage}</p>}
+        {regiaStatusMessage && <p className="text-sm font-semibold text-amber-300">{regiaStatusMessage}</p>}
       </div>
 
-      {/* ---- Batterie di partenza ---- */}
-      {availableHeatGames.length > 0 && (
-        <div className="mt-6 rounded-lg border border-stone-800 bg-stone-900 p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-stone-300">Batterie di partenza</h2>
-          <p className="mt-1 text-sm text-stone-500">Estrai o modifica le batterie per ogni prova. La pagina /estrazioni le mostra separate.</p>
+      {/* ---- Estrazioni / Giochi ---- */}
+      <div className="mt-6 flex gap-2 border-b border-stone-800">
+        <button
+          type="button"
+          onClick={() => setActiveSection('estrazioni')}
+          className={`flex items-center gap-2 rounded-t-md px-4 py-2 text-sm font-semibold transition ${
+            activeSection === 'estrazioni' ? 'border-b-2 border-palio-500 text-palio-300' : 'text-stone-400 hover:text-stone-200'
+          }`}
+        >
+          <Repeat className="h-4 w-4" />
+          Estrazioni
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveSection('giochi')}
+          className={`flex items-center gap-2 rounded-t-md px-4 py-2 text-sm font-semibold transition ${
+            activeSection === 'giochi' ? 'border-b-2 border-palio-500 text-palio-300' : 'text-stone-400 hover:text-stone-200'
+          }`}
+        >
+          <Trophy className="h-4 w-4" />
+          Giochi
+        </button>
+      </div>
 
-          <div className="mt-4 flex flex-wrap items-end gap-3">
-            <label className="text-sm font-semibold text-stone-300">
-              Gioco
-              <select
-                value={heatGame}
-                onChange={(e) => setHeatGame(e.target.value as PalioGame)}
-                className="ml-2 rounded-md border border-stone-700 bg-stone-800 px-3 py-1.5 text-sm text-stone-100"
-              >
-                {availableHeatGames.map((g) => (
-                  <option key={g} value={g}>{liveGameLabels[g]}</option>
-                ))}
-              </select>
-            </label>
-            <label className="text-sm font-semibold text-stone-300">
-              Contrade per batteria
-              <input
-                type="number" min={2} max={heatEligibleContrade.length || 12}
-                value={heatSize}
-                onChange={(e) => setHeatSize(e.target.value)}
-                className="ml-2 w-20 rounded-md border border-stone-700 bg-stone-800 px-3 py-1.5 text-sm text-stone-100"
-              />
-            </label>
-            <button
-              type="button"
-              disabled={!selectedEditionId || savingHeats}
-              onClick={handleGenerateHeats}
-              className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-            >
-              <Repeat className="h-4 w-4" />
-              Estrai
-            </button>
-            <button
-              type="button"
-              disabled={!selectedEditionId || savingHeats}
-              onClick={handleSaveHeats}
-              className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-            >
-              <Save className="h-4 w-4" />
-              Salva
-            </button>
+      {activeSection === 'estrazioni' && (
+        <div className="mt-4 space-y-6">
+          <div className="rounded-lg border border-blue-900/60 bg-blue-950/20 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-blue-300">
+                  <Send className="h-4 w-4" />
+                  Regia estrazioni
+                </h3>
+                <p className="mt-1 text-sm text-blue-100/80">Controlla la pagina /estrazioni: resetta, invia una batteria alla volta o mostra tutto.</p>
+                <p className="mt-1 text-sm font-semibold text-blue-100">Inviate {revealedDrawCount}/{drawableHeatCount} estrazioni</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={!selectedEditionId || savingLiveField === 'draw_revealed_count' || drawableHeatCount === 0}
+                  onClick={() => handleSetDrawRevealedCount(0)}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-blue-700 px-3 py-1.5 text-sm font-semibold text-blue-200 hover:border-blue-400 disabled:opacity-50"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Reset
+                </button>
+                <button
+                  type="button"
+                  disabled={!selectedEditionId || savingLiveField === 'draw_revealed_count' || drawableHeatCount === 0 || revealedDrawCount >= drawableHeatCount}
+                  onClick={() => handleSetDrawRevealedCount(revealedDrawCount + 1)}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  <Send className="h-4 w-4" />
+                  Invia prossima
+                </button>
+                <button
+                  type="button"
+                  disabled={!selectedEditionId || savingLiveField === 'draw_revealed_count' || drawableHeatCount === 0}
+                  onClick={() => handleSetDrawRevealedCount(drawableHeatCount)}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  <Flag className="h-4 w-4" />
+                  Invia tutte
+                </button>
+              </div>
+            </div>
+            {drawableHeatCount === 0 && (
+              <p className="mt-3 text-sm text-blue-100/70">
+                Nessuna batteria estratta per Corsa/Carriole/Cerchio/Torre. Melocotogno e Triplice Tenzone non vengono inviate qui.
+              </p>
+            )}
           </div>
 
-          {heatsStatusMessage && <p className="mt-3 text-sm font-semibold text-palio-300">{heatsStatusMessage}</p>}
+          {availableHeatGames.length > 0 && (
+            <div className="rounded-lg border border-stone-800 bg-stone-900 p-4">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-stone-300">Batterie di partenza</h2>
+              <p className="mt-1 text-sm text-stone-500">Estrai o modifica le batterie per ogni prova. La pagina /estrazioni le mostra separate.</p>
 
-          {heatRows.length > 0 && (
-            <div className="mt-4 overflow-hidden rounded-md border border-stone-700">
-              <div className="grid grid-cols-[minmax(0,1fr)_90px_90px_140px] gap-2 border-b border-stone-700 bg-stone-800 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-stone-400">
-                <span>Contrada</span>
-                <span>Batteria</span>
-                <span>Ordine</span>
-                <span>Assenza giocatori</span>
+              <div className="mt-4 flex flex-wrap items-end gap-3">
+                <label className="text-sm font-semibold text-stone-300">
+                  Gioco
+                  <select
+                    value={heatGame}
+                    onChange={(e) => setHeatGame(e.target.value as PalioGame)}
+                    className="ml-2 rounded-md border border-stone-700 bg-stone-800 px-3 py-1.5 text-sm text-stone-100"
+                  >
+                    {availableHeatGames.map((g) => (
+                      <option key={g} value={g}>{liveGameLabels[g]}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-sm font-semibold text-stone-300">
+                  Contrade per batteria
+                  <input
+                    type="number" min={2} max={heatEligibleContrade.length || 12}
+                    value={heatSize}
+                    onChange={(e) => setHeatSize(e.target.value)}
+                    className="ml-2 w-20 rounded-md border border-stone-700 bg-stone-800 px-3 py-1.5 text-sm text-stone-100"
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={!selectedEditionId || savingHeats}
+                  onClick={handleGenerateHeats}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  <Repeat className="h-4 w-4" />
+                  Estrai
+                </button>
+                <button
+                  type="button"
+                  disabled={!selectedEditionId || savingHeats}
+                  onClick={handleSaveHeats}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  <Save className="h-4 w-4" />
+                  Salva
+                </button>
               </div>
-              <div className="max-h-80 divide-y divide-stone-800 overflow-y-auto">
-                {[...heatRows]
-                  .sort((a, b) => {
-                    if (a.no_players !== b.no_players) return a.no_players ? 1 : -1;
-                    if (a.heat_number !== b.heat_number) return a.heat_number - b.heat_number;
-                    if (a.display_order !== b.display_order) return a.display_order - b.display_order;
-                    const firstName = contrade.find((c) => c.id === a.contrada_id)?.name ?? '';
-                    const secondName = contrade.find((c) => c.id === b.contrada_id)?.name ?? '';
-                    return firstName.localeCompare(secondName, 'it');
-                  })
-                  .map((heat) => {
-                    const contrada = contrade.find((c) => c.id === heat.contrada_id);
-                    return (
-                      <div key={heat.contrada_id} className="grid grid-cols-[minmax(0,1fr)_90px_90px_140px] items-center gap-2 px-3 py-2">
-                        <div className="truncate text-sm font-medium text-stone-100">{contrada?.name ?? 'Contrada'}</div>
-                        <input
-                          type="number" min={1}
-                          value={heat.heat_number}
-                          onChange={(e) => updateHeatField(heat.contrada_id, 'heat_number', e.target.value)}
-                          className="w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1 text-sm text-stone-100"
-                        />
-                        <input
-                          type="number" min={1}
-                          value={heat.display_order}
-                          onChange={(e) => updateHeatField(heat.contrada_id, 'display_order', e.target.value)}
-                          className="w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1 text-sm text-stone-100"
-                        />
-                        <label className="inline-flex items-center gap-2 text-sm font-medium text-stone-300">
-                          <input
-                            type="checkbox"
-                            checked={heat.no_players}
-                            onChange={(e) => updateHeatField(heat.contrada_id, 'no_players', e.target.checked)}
-                            className="rounded border-stone-600"
-                          />
-                          Sì
-                        </label>
-                      </div>
-                    );
-                  })}
-              </div>
+
+              {heatsStatusMessage && <p className="mt-3 text-sm font-semibold text-palio-300">{heatsStatusMessage}</p>}
+
+              {heatRows.length > 0 && (
+                <div className="mt-4 overflow-hidden rounded-md border border-stone-700">
+                  <div className="grid grid-cols-[minmax(0,1fr)_90px_90px_140px] gap-2 border-b border-stone-700 bg-stone-800 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-stone-400">
+                    <span>Contrada</span>
+                    <span>Batteria</span>
+                    <span>Ordine</span>
+                    <span>Assenza giocatori</span>
+                  </div>
+                  <div className="max-h-80 divide-y divide-stone-800 overflow-y-auto">
+                    {[...heatRows]
+                      .sort((a, b) => {
+                        if (a.no_players !== b.no_players) return a.no_players ? 1 : -1;
+                        if (a.heat_number !== b.heat_number) return a.heat_number - b.heat_number;
+                        if (a.display_order !== b.display_order) return a.display_order - b.display_order;
+                        const firstName = contrade.find((c) => c.id === a.contrada_id)?.name ?? '';
+                        const secondName = contrade.find((c) => c.id === b.contrada_id)?.name ?? '';
+                        return firstName.localeCompare(secondName, 'it');
+                      })
+                      .map((heat) => {
+                        const contrada = contrade.find((c) => c.id === heat.contrada_id);
+                        return (
+                          <div key={heat.contrada_id} className="grid grid-cols-[minmax(0,1fr)_90px_90px_140px] items-center gap-2 px-3 py-2">
+                            <div className="truncate text-sm font-medium text-stone-100">{contrada?.name ?? 'Contrada'}</div>
+                            <input
+                              type="number" min={1}
+                              value={heat.heat_number}
+                              onChange={(e) => updateHeatField(heat.contrada_id, 'heat_number', e.target.value)}
+                              className="w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1 text-sm text-stone-100"
+                            />
+                            <input
+                              type="number" min={1}
+                              value={heat.display_order}
+                              onChange={(e) => updateHeatField(heat.contrada_id, 'display_order', e.target.value)}
+                              className="w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1 text-sm text-stone-100"
+                            />
+                            <label className="inline-flex items-center gap-2 text-sm font-medium text-stone-300">
+                              <input
+                                type="checkbox"
+                                checked={heat.no_players}
+                                onChange={(e) => updateHeatField(heat.contrada_id, 'no_players', e.target.checked)}
+                                className="rounded border-stone-600"
+                              />
+                              Sì
+                            </label>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
       )}
 
-      {/* ---- Risultati ---- */}
-      <div className="mt-6 flex flex-wrap gap-2">
-        {availableGames.map((g) => {
-          const isActive = g === game;
-          const isLocked = g === 'finale' && !isFinaleReady;
-          return (
-            <button
-              key={g}
-              type="button"
-              disabled={isLocked}
-              onClick={() => setGame(g)}
-              title={isLocked ? 'Completa prima tutte le prove precedenti' : undefined}
-              className={`rounded-md border px-3 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                isActive ? 'border-palio-500 bg-palio-500 text-white' : 'border-stone-700 bg-stone-900 text-stone-300 hover:border-palio-400'
-              }`}
-            >
-              {liveGameLabels[g]}
-            </button>
-          );
-        })}
-      </div>
-      <p className="mt-2 text-sm text-stone-400">{palioGameDescriptions[game]}</p>
+      {activeSection === 'giochi' && (
+        <div className="mt-4 space-y-6">
+          <div className="rounded-lg border border-stone-800 bg-stone-900 p-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-stone-300">Cosa mostrare su /risultati</h2>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {([
+                { field: 'show_heats' as const, label: 'Batterie' },
+                { field: 'show_games' as const, label: 'Risultati prove' },
+                { field: 'show_partial_ranking' as const, label: 'Classifica parziale' },
+                { field: 'show_total_ranking' as const, label: 'Classifica finale' },
+              ]).map(({ field, label }) => {
+                const isVisible = selectedLiveControl?.[field] ?? (field === 'show_heats' ? false : true);
+                return (
+                  <button
+                    key={field}
+                    type="button"
+                    disabled={!selectedEditionId || savingLiveField === field}
+                    onClick={() => handleToggleLiveSection(field)}
+                    className="flex items-center justify-between rounded-md border border-stone-700 bg-stone-950 px-3 py-2 text-sm font-medium text-stone-200 transition hover:border-amber-500 disabled:opacity-50"
+                  >
+                    {label}
+                    {isVisible ? <Eye className="h-4 w-4 text-emerald-400" /> : <EyeOff className="h-4 w-4 text-stone-500" />}
+                  </button>
+                );
+              })}
+            </div>
 
-      <div
-        className={`mt-4 grid gap-3 rounded-lg border p-4 sm:grid-cols-3 ${
-          validation.invalidCount > 0
-            ? 'border-red-900/60 bg-red-950/20'
-            : validation.missingCount > 0
-              ? 'border-amber-900/60 bg-amber-950/20'
-              : 'border-emerald-900/60 bg-emerald-950/20'
-        }`}
-      >
-        <div className="flex items-center gap-2">
-          {validation.invalidCount > 0 ? (
-            <AlertCircle className="h-5 w-5 text-red-400" />
-          ) : validation.missingCount > 0 ? (
-            <Clock className="h-5 w-5 text-amber-400" />
-          ) : (
-            <CheckCircle className="h-5 w-5 text-emerald-400" />
-          )}
-          <span className="text-sm font-bold text-stone-100">
-            {validation.invalidCount > 0 ? 'Correzione richiesta' : validation.missingCount > 0 ? 'Bozza in corso' : 'Pronto per la conferma'}
-          </span>
-        </div>
-        <div className="text-sm text-stone-300">{validation.completeCount} di {displayRows.length} contrade verificate</div>
-        <div className="text-sm text-stone-300">
-          {validation.invalidCount > 0
-            ? `${validation.invalidCount} valori da correggere`
-            : validation.missingCount > 0
-              ? `${validation.missingCount} risultati da inserire`
-              : 'Classifica e calcoli aggiornati automaticamente'}
-        </div>
-      </div>
+            {currentMonth === 'ottobre' && (
+              <form
+                onSubmit={(e) => { e.preventDefault(); handleSaveTripliceWinner(); }}
+                className="mt-4 flex flex-wrap items-end gap-3 rounded-md border border-yellow-800/50 bg-yellow-950/20 p-4"
+              >
+                <label className="text-sm font-semibold text-stone-300">
+                  Vincitore Triplice Tenzone
+                  <select
+                    value={tripliceWinnerId}
+                    onChange={(e) => setTripliceWinnerId(e.target.value)}
+                    className="ml-2 rounded-md border border-stone-700 bg-stone-800 px-3 py-1.5 text-sm text-stone-100"
+                  >
+                    <option value="">Non decretato</option>
+                    {finalists.map((item) => (
+                      <option key={item.contradaId} value={item.contradaId}>
+                        {contrade.find((c) => c.id === item.contradaId)?.name ?? item.contradaId}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="submit"
+                  disabled={!selectedEditionId || savingLiveField === 'triplice_winner'}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-yellow-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-yellow-700 disabled:opacity-50"
+                >
+                  <Save className="h-4 w-4" />
+                  Conferma
+                </button>
+              </form>
+            )}
+          </div>
 
-      <form onSubmit={handleSave} className="mt-4 space-y-3">
-        {displayRows.map((row) => {
-          const contrada = contrade.find((c) => c.id === row.contrada_id);
-          const isMelocotogno = game === 'melocotogno';
-          const isNoPlayer = noPlayerContradaIds.has(row.contrada_id);
-          const rowStatus = validation.statusByContradaId.get(row.contrada_id) ?? 'missing';
-          const isRowInvalid = rowStatus === 'invalid';
-          const scoreLabel = rowStatus === 'missing'
-            ? 'In attesa'
-            : game === 'finale'
-              ? (row.adjusted_time_seconds ? `${row.adjusted_time_seconds}s` : 'N.A.')
-              : `${row.points || '0'} pt`;
-          const heat = heats.find((h) => h.game === game && h.contrada_id === row.contrada_id);
+          <div>
+            <div className="flex flex-wrap gap-2">
+              {availableGames.map((g) => {
+                const isActive = g === game;
+                const isLocked = g === 'finale' && !isFinaleReady;
+                return (
+                  <button
+                    key={g}
+                    type="button"
+                    disabled={isLocked}
+                    onClick={() => setGame(g)}
+                    title={isLocked ? 'Completa prima tutte le prove precedenti' : undefined}
+                    className={`rounded-md border px-3 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                      isActive ? 'border-palio-500 bg-palio-500 text-white' : 'border-stone-700 bg-stone-900 text-stone-300 hover:border-palio-400'
+                    }`}
+                  >
+                    {liveGameLabels[g]}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-2 text-sm text-stone-400">{palioGameDescriptions[game]}</p>
 
-          return (
             <div
-              key={row.contrada_id}
-              className={`rounded-lg border bg-stone-900 p-4 ${
-                isRowInvalid ? 'border-red-700' : rowStatus === 'complete' || rowStatus === 'notApplicable' ? 'border-emerald-800' : 'border-stone-700'
+              className={`mt-4 grid gap-3 rounded-lg border p-4 sm:grid-cols-3 ${
+                validation.invalidCount > 0
+                  ? 'border-red-900/60 bg-red-950/20'
+                  : validation.missingCount > 0
+                    ? 'border-amber-900/60 bg-amber-950/20'
+                    : 'border-emerald-900/60 bg-emerald-950/20'
               }`}
             >
-              <div className="grid gap-3 lg:grid-cols-[180px_minmax(0,1fr)_180px]">
-                <div>
-                  <div className="font-semibold text-stone-100">{contrada?.name ?? 'Contrada'}</div>
-                  {!isMelocotogno && heat && (
-                    <div className="mt-1 inline-flex rounded-full bg-blue-950/40 px-2 py-0.5 text-xs font-semibold text-blue-300">
-                      Batteria {heat.heat_number} · ordine {heat.display_order}
-                    </div>
-                  )}
-                  {isNoPlayer && (
-                    <div className="mt-1 inline-flex rounded-full bg-red-950/40 px-2 py-0.5 text-xs font-semibold text-red-300">
-                      Senza giocatori · N.A.
-                    </div>
-                  )}
-                </div>
-
-                <div className={`grid gap-2 ${isMelocotogno ? 'sm:grid-cols-4' : 'sm:grid-cols-2'}`}>
-                  {isMelocotogno ? (
-                    <>
-                      <label className="text-xs font-semibold text-stone-400">
-                        Fettucce da 2
-                        <input
-                          type="number" min={0} step={1} disabled={isNoPlayer}
-                          value={row.melocotogno_2_count}
-                          onChange={(e) => updateField(row.contrada_id, 'melocotogno_2_count', e.target.value)}
-                          className="mt-1 w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1.5 text-sm text-stone-100 disabled:opacity-50"
-                        />
-                      </label>
-                      <label className="text-xs font-semibold text-stone-400">
-                        Fettucce da 5
-                        <input
-                          type="number" min={0} step={1} disabled={isNoPlayer}
-                          value={row.melocotogno_5_count}
-                          onChange={(e) => updateField(row.contrada_id, 'melocotogno_5_count', e.target.value)}
-                          className="mt-1 w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1.5 text-sm text-stone-100 disabled:opacity-50"
-                        />
-                      </label>
-                      <label className="text-xs font-semibold text-stone-400">
-                        Fettucce da 10
-                        <input
-                          type="number" min={0} step={1} disabled={isNoPlayer}
-                          value={row.melocotogno_10_count}
-                          onChange={(e) => updateField(row.contrada_id, 'melocotogno_10_count', e.target.value)}
-                          className="mt-1 w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1.5 text-sm text-stone-100 disabled:opacity-50"
-                        />
-                      </label>
-                      <label className="flex items-center gap-2 text-xs font-semibold text-stone-400">
-                        <input
-                          type="checkbox"
-                          checked={isNoPlayer}
-                          onChange={(e) => updateNoPlayerField(row.contrada_id, game, e.target.checked)}
-                          className="rounded border-stone-600"
-                        />
-                        Senza giocatori
-                      </label>
-                    </>
-                  ) : (
-                    <>
-                      <label className="text-xs font-semibold text-stone-400">
-                        Tempo (s)
-                        <input
-                          type="number" min={0} step="0.01" disabled={isNoPlayer}
-                          value={row.time_seconds}
-                          onChange={(e) => updateField(row.contrada_id, 'time_seconds', e.target.value)}
-                          className="mt-1 w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1.5 text-sm text-stone-100 disabled:opacity-50"
-                        />
-                      </label>
-                      <label className="text-xs font-semibold text-stone-400">
-                        Penalità
-                        <input
-                          type="number" min={0} step={1} disabled={isNoPlayer}
-                          value={row.penalty_count}
-                          onChange={(e) => updateField(row.contrada_id, 'penalty_count', e.target.value)}
-                          className="mt-1 w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1.5 text-sm text-stone-100 disabled:opacity-50"
-                        />
-                      </label>
-                      <label className="col-span-2 inline-flex items-center gap-2 text-xs font-semibold text-stone-400">
-                        <input
-                          type="checkbox" disabled={isNoPlayer}
-                          checked={row.is_disqualified}
-                          onChange={(e) => updateField(row.contrada_id, 'is_disqualified', e.target.checked)}
-                          className="rounded border-stone-600"
-                        />
-                        Non classificata (N.A.)
-                      </label>
-                    </>
-                  )}
-                  <label className={`text-xs font-semibold text-stone-400 ${isMelocotogno ? 'sm:col-span-4' : 'sm:col-span-2'}`}>
-                    Note
-                    <input
-                      value={row.notes}
-                      onChange={(e) => updateField(row.contrada_id, 'notes', e.target.value)}
-                      className="mt-1 w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1.5 text-sm text-stone-100"
-                    />
-                  </label>
-                </div>
-
-                <div className="rounded-md border border-stone-700 bg-stone-800/60 p-3">
-                  <div className="text-center">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-                      {row.is_calculation_overridden ? 'Calcolo corretto' : 'Calcolo automatico'}
-                    </div>
-                    <div className="mt-1 text-lg font-bold text-stone-100">{scoreLabel}</div>
-                    <div className="mt-1 text-xs text-stone-400">{row.position ? `${row.position}° posizione` : 'Non calcolata'}</div>
-                  </div>
-
-                  <label className="mt-3 flex items-center gap-2 rounded-md border border-blue-900/60 bg-blue-950/30 px-2 py-1.5 text-xs font-semibold text-blue-200">
-                    <input
-                      type="checkbox"
-                      checked={row.is_calculation_overridden}
-                      disabled={isNoPlayer}
-                      onChange={(e) => updateCalculationOverride(row.contrada_id, e.target.checked)}
-                      className="rounded border-blue-700"
-                    />
-                    Correggi calcolo
-                  </label>
-
-                  {row.is_calculation_overridden && (
-                    <div className="mt-3 space-y-2 border-t border-blue-900/60 pt-3">
-                      {!isMelocotogno && !row.is_disqualified && (
-                        <label className="block text-xs font-semibold text-stone-400">
-                          Tempo corretto
-                          <input
-                            type="number" min={0} step="0.01"
-                            value={row.adjusted_time_seconds}
-                            onChange={(e) => updateField(row.contrada_id, 'adjusted_time_seconds', e.target.value)}
-                            className="mt-1 w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1.5 text-sm text-stone-100"
-                          />
-                        </label>
-                      )}
-                      <label className="block text-xs font-semibold text-stone-400">
-                        Posizione corretta
-                        <input
-                          type="number" min={1} step={1}
-                          value={row.position}
-                          onChange={(e) => updateField(row.contrada_id, 'position', e.target.value)}
-                          className="mt-1 w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1.5 text-sm text-stone-100"
-                        />
-                      </label>
-                      {game !== 'finale' && (
-                        <label className="block text-xs font-semibold text-stone-400">
-                          Punti corretti
-                          <input
-                            type="number" min={0} step="0.01"
-                            value={row.points}
-                            onChange={(e) => updateField(row.contrada_id, 'points', e.target.value)}
-                            className="mt-1 w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1.5 text-sm text-stone-100"
-                          />
-                        </label>
-                      )}
-                    </div>
-                  )}
-                </div>
+              <div className="flex items-center gap-2">
+                {validation.invalidCount > 0 ? (
+                  <AlertCircle className="h-5 w-5 text-red-400" />
+                ) : validation.missingCount > 0 ? (
+                  <Clock className="h-5 w-5 text-amber-400" />
+                ) : (
+                  <CheckCircle className="h-5 w-5 text-emerald-400" />
+                )}
+                <span className="text-sm font-bold text-stone-100">
+                  {validation.invalidCount > 0 ? 'Correzione richiesta' : validation.missingCount > 0 ? 'Bozza in corso' : 'Pronto per la conferma'}
+                </span>
+              </div>
+              <div className="text-sm text-stone-300">{validation.completeCount} di {displayRows.length} contrade verificate</div>
+              <div className="text-sm text-stone-300">
+                {validation.invalidCount > 0
+                  ? `${validation.invalidCount} valori da correggere`
+                  : validation.missingCount > 0
+                    ? `${validation.missingCount} risultati da inserire`
+                    : 'Classifica e calcoli aggiornati automaticamente'}
               </div>
             </div>
-          );
-        })}
 
-        {statusMessage && <p className="text-sm font-semibold text-palio-300">{statusMessage}</p>}
+            <form onSubmit={handleSave} className="mt-4 space-y-3">
+              {displayRows.map((row) => {
+                const contrada = contrade.find((c) => c.id === row.contrada_id);
+                const isMelocotogno = game === 'melocotogno';
+                const isNoPlayer = noPlayerContradaIds.has(row.contrada_id);
+                const rowStatus = validation.statusByContradaId.get(row.contrada_id) ?? 'missing';
+                const isRowInvalid = rowStatus === 'invalid';
+                const scoreLabel = rowStatus === 'missing'
+                  ? 'In attesa'
+                  : game === 'finale'
+                    ? (row.adjusted_time_seconds ? `${row.adjusted_time_seconds}s` : 'N.A.')
+                    : `${row.points || '0'} pt`;
+                const heat = heats.find((h) => h.game === game && h.contrada_id === row.contrada_id);
 
-        <button
-          type="submit"
-          disabled={saving}
-          className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-        >
-          <Save className="h-4 w-4" />
-          {saving ? 'Salvataggio...' : 'Salva risultati'}
-        </button>
-      </form>
+                return (
+                  <div
+                    key={row.contrada_id}
+                    className={`rounded-lg border bg-stone-900 p-4 ${
+                      isRowInvalid ? 'border-red-700' : rowStatus === 'complete' || rowStatus === 'notApplicable' ? 'border-emerald-800' : 'border-stone-700'
+                    }`}
+                  >
+                    <div className="grid gap-3 lg:grid-cols-[180px_minmax(0,1fr)_180px]">
+                      <div>
+                        <div className="font-semibold text-stone-100">{contrada?.name ?? 'Contrada'}</div>
+                        {!isMelocotogno && heat && (
+                          <div className="mt-1 inline-flex rounded-full bg-blue-950/40 px-2 py-0.5 text-xs font-semibold text-blue-300">
+                            Batteria {heat.heat_number} · ordine {heat.display_order}
+                          </div>
+                        )}
+                        {isNoPlayer && (
+                          <div className="mt-1 inline-flex rounded-full bg-red-950/40 px-2 py-0.5 text-xs font-semibold text-red-300">
+                            Senza giocatori · N.A.
+                          </div>
+                        )}
+                      </div>
+
+                      <div className={`grid gap-2 ${isMelocotogno ? 'sm:grid-cols-4' : 'sm:grid-cols-2'}`}>
+                        {isMelocotogno ? (
+                          <>
+                            <label className="text-xs font-semibold text-stone-400">
+                              Fettucce da 2
+                              <input
+                                type="number" min={0} step={1} disabled={isNoPlayer}
+                                value={row.melocotogno_2_count}
+                                onChange={(e) => updateField(row.contrada_id, 'melocotogno_2_count', e.target.value)}
+                                className="mt-1 w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1.5 text-sm text-stone-100 disabled:opacity-50"
+                              />
+                            </label>
+                            <label className="text-xs font-semibold text-stone-400">
+                              Fettucce da 5
+                              <input
+                                type="number" min={0} step={1} disabled={isNoPlayer}
+                                value={row.melocotogno_5_count}
+                                onChange={(e) => updateField(row.contrada_id, 'melocotogno_5_count', e.target.value)}
+                                className="mt-1 w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1.5 text-sm text-stone-100 disabled:opacity-50"
+                              />
+                            </label>
+                            <label className="text-xs font-semibold text-stone-400">
+                              Fettucce da 10
+                              <input
+                                type="number" min={0} step={1} disabled={isNoPlayer}
+                                value={row.melocotogno_10_count}
+                                onChange={(e) => updateField(row.contrada_id, 'melocotogno_10_count', e.target.value)}
+                                className="mt-1 w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1.5 text-sm text-stone-100 disabled:opacity-50"
+                              />
+                            </label>
+                            <label className="flex items-center gap-2 text-xs font-semibold text-stone-400">
+                              <input
+                                type="checkbox"
+                                checked={isNoPlayer}
+                                onChange={(e) => updateNoPlayerField(row.contrada_id, game, e.target.checked)}
+                                className="rounded border-stone-600"
+                              />
+                              Senza giocatori
+                            </label>
+                          </>
+                        ) : (
+                          <>
+                            <label className="text-xs font-semibold text-stone-400">
+                              Tempo (s)
+                              <input
+                                type="number" min={0} step="0.01" disabled={isNoPlayer}
+                                value={row.time_seconds}
+                                onChange={(e) => updateField(row.contrada_id, 'time_seconds', e.target.value)}
+                                className="mt-1 w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1.5 text-sm text-stone-100 disabled:opacity-50"
+                              />
+                            </label>
+                            <label className="text-xs font-semibold text-stone-400">
+                              Penalità
+                              <input
+                                type="number" min={0} step={1} disabled={isNoPlayer}
+                                value={row.penalty_count}
+                                onChange={(e) => updateField(row.contrada_id, 'penalty_count', e.target.value)}
+                                className="mt-1 w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1.5 text-sm text-stone-100 disabled:opacity-50"
+                              />
+                            </label>
+                            <label className="col-span-2 inline-flex items-center gap-2 text-xs font-semibold text-stone-400">
+                              <input
+                                type="checkbox" disabled={isNoPlayer}
+                                checked={row.is_disqualified}
+                                onChange={(e) => updateField(row.contrada_id, 'is_disqualified', e.target.checked)}
+                                className="rounded border-stone-600"
+                              />
+                              Non classificata (N.A.)
+                            </label>
+                          </>
+                        )}
+                        <label className={`text-xs font-semibold text-stone-400 ${isMelocotogno ? 'sm:col-span-4' : 'sm:col-span-2'}`}>
+                          Note
+                          <input
+                            value={row.notes}
+                            onChange={(e) => updateField(row.contrada_id, 'notes', e.target.value)}
+                            className="mt-1 w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1.5 text-sm text-stone-100"
+                          />
+                        </label>
+                      </div>
+
+                      <div className="rounded-md border border-stone-700 bg-stone-800/60 p-3">
+                        <div className="text-center">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                            {row.is_calculation_overridden ? 'Calcolo corretto' : 'Calcolo automatico'}
+                          </div>
+                          <div className="mt-1 text-lg font-bold text-stone-100">{scoreLabel}</div>
+                          <div className="mt-1 text-xs text-stone-400">{row.position ? `${row.position}° posizione` : 'Non calcolata'}</div>
+                        </div>
+
+                        <label className="mt-3 flex items-center gap-2 rounded-md border border-blue-900/60 bg-blue-950/30 px-2 py-1.5 text-xs font-semibold text-blue-200">
+                          <input
+                            type="checkbox"
+                            checked={row.is_calculation_overridden}
+                            disabled={isNoPlayer}
+                            onChange={(e) => updateCalculationOverride(row.contrada_id, e.target.checked)}
+                            className="rounded border-blue-700"
+                          />
+                          Correggi calcolo
+                        </label>
+
+                        {row.is_calculation_overridden && (
+                          <div className="mt-3 space-y-2 border-t border-blue-900/60 pt-3">
+                            {!isMelocotogno && !row.is_disqualified && (
+                              <label className="block text-xs font-semibold text-stone-400">
+                                Tempo corretto
+                                <input
+                                  type="number" min={0} step="0.01"
+                                  value={row.adjusted_time_seconds}
+                                  onChange={(e) => updateField(row.contrada_id, 'adjusted_time_seconds', e.target.value)}
+                                  className="mt-1 w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1.5 text-sm text-stone-100"
+                                />
+                              </label>
+                            )}
+                            <label className="block text-xs font-semibold text-stone-400">
+                              Posizione corretta
+                              <input
+                                type="number" min={1} step={1}
+                                value={row.position}
+                                onChange={(e) => updateField(row.contrada_id, 'position', e.target.value)}
+                                className="mt-1 w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1.5 text-sm text-stone-100"
+                              />
+                            </label>
+                            {game !== 'finale' && (
+                              <label className="block text-xs font-semibold text-stone-400">
+                                Punti corretti
+                                <input
+                                  type="number" min={0} step="0.01"
+                                  value={row.points}
+                                  onChange={(e) => updateField(row.contrada_id, 'points', e.target.value)}
+                                  className="mt-1 w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1.5 text-sm text-stone-100"
+                                />
+                              </label>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {statusMessage && <p className="text-sm font-semibold text-palio-300">{statusMessage}</p>}
+
+              <button
+                type="submit"
+                disabled={saving}
+                className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                <Save className="h-4 w-4" />
+                {saving ? 'Salvataggio...' : 'Salva risultati'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-export function PalioResultsInput() {
+export function PalioGestione() {
   return (
     <PalioAuthGate>
       <PalioResultsInputContent />
