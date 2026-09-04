@@ -18,6 +18,8 @@ export interface PalioEdition {
 export interface PalioLiveControl {
   draw_revealed_count: number;
   edition_id: string;
+  games_focus_game: PalioGame | null;
+  heats_focus_game: PalioGame | null;
   id: string;
   is_active: boolean;
   live_title: string | null;
@@ -194,7 +196,7 @@ export function usePalioLiveData(channelName: string): PalioLiveData {
   const fetchLiveData = useCallback(async () => {
     const { data: controlData, error: controlError } = await supabase
       .from('palio_live_controls')
-      .select('id, edition_id, is_active, live_title, show_heats, show_games, show_partial_ranking, show_total_ranking, triplice_winner_contrada_id, draw_revealed_count, edition:palio_editions(id, year, month)')
+      .select('id, edition_id, is_active, live_title, show_heats, show_games, show_partial_ranking, show_total_ranking, triplice_winner_contrada_id, draw_revealed_count, heats_focus_game, games_focus_game, edition:palio_editions(id, year, month)')
       .eq('is_active', true)
       .maybeSingle();
 
@@ -342,8 +344,10 @@ export function usePalioLiveData(channelName: string): PalioLiveData {
       .filter((game) => !orderedGames.includes(game) && !completedGames.has(game))
       .sort((a, b) => palioGameLabels[a].localeCompare(palioGameLabels[b], 'it'));
 
-    return [...orderedGames, ...extraGames];
-  }, [completedGames, expectedGames, heats]);
+    const allHeatGames = [...orderedGames, ...extraGames];
+    const focusGame = control?.heats_focus_game;
+    return focusGame ? allHeatGames.filter((game) => game === focusGame) : allHeatGames;
+  }, [completedGames, control?.heats_focus_game, expectedGames, heats]);
 
   const heatGroupsByGame = useMemo(
     () => new Map(heatGames.map((game) => [
@@ -362,8 +366,13 @@ export function usePalioLiveData(channelName: string): PalioLiveData {
     [heatGames, heats]
   );
 
+  const focusedDisplayGames = useMemo(() => {
+    const focusGame = control?.games_focus_game;
+    return focusGame ? displayGames.filter((game) => game === focusGame) : displayGames;
+  }, [control?.games_focus_game, displayGames]);
+
   const gameResultsGroups = useMemo(
-    () => displayGames
+    () => focusedDisplayGames
       .map((game) => ({
         game,
         results: results
@@ -385,7 +394,7 @@ export function usePalioLiveData(channelName: string): PalioLiveData {
           })
       }))
       .filter((group) => group.results.length > 0),
-    [contrade, displayGames, results]
+    [contrade, focusedDisplayGames, results]
   );
 
   const gameResultsPages = useMemo(() => {

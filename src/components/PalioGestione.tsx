@@ -174,7 +174,7 @@ function PalioResultsInputContent() {
   const fetchLiveControls = useCallback(async () => {
     const { data, error } = await supabase
       .from('palio_live_controls')
-      .select('id, edition_id, is_active, live_title, show_heats, show_games, show_partial_ranking, show_total_ranking, triplice_winner_contrada_id, draw_revealed_count');
+      .select('id, edition_id, is_active, live_title, show_heats, show_games, show_partial_ranking, show_total_ranking, triplice_winner_contrada_id, draw_revealed_count, heats_focus_game, games_focus_game');
     if (error) {
       console.error('Error fetching palio live controls:', error);
       setLiveControls([]);
@@ -622,6 +622,8 @@ function PalioResultsInputContent() {
           show_total_ranking: selectedLiveControl?.show_total_ranking ?? true,
           triplice_winner_contrada_id: selectedLiveControl?.triplice_winner_contrada_id ?? null,
           draw_revealed_count: selectedLiveControl?.draw_revealed_count ?? 0,
+          heats_focus_game: selectedLiveControl?.heats_focus_game ?? null,
+          games_focus_game: selectedLiveControl?.games_focus_game ?? null,
         }, { onConflict: 'edition_id' });
       if (error) {
         setRegiaStatusMessage(`Errore attivazione diretta: ${error.message}`);
@@ -657,9 +659,47 @@ function PalioResultsInputContent() {
           show_total_ranking: field === 'show_total_ranking' ? nextValue : selectedLiveControl?.show_total_ranking ?? true,
           triplice_winner_contrada_id: selectedLiveControl?.triplice_winner_contrada_id ?? null,
           draw_revealed_count: selectedLiveControl?.draw_revealed_count ?? 0,
+          heats_focus_game: selectedLiveControl?.heats_focus_game ?? null,
+          games_focus_game: selectedLiveControl?.games_focus_game ?? null,
         }, { onConflict: 'edition_id' });
       if (error) {
         setRegiaStatusMessage(`Errore aggiornamento sezione: ${error.message}`);
+        return;
+      }
+      await fetchLiveControls();
+    } finally {
+      setSavingLiveField(null);
+    }
+  }
+
+  async function handleSetFocusGame(
+    field: 'heats_focus_game' | 'games_focus_game',
+    value: PalioGame | null
+  ) {
+    if (!selectedEditionId) {
+      setRegiaStatusMessage("Seleziona prima un'edizione");
+      return;
+    }
+
+    setSavingLiveField(field);
+    try {
+      const { error } = await supabase
+        .from('palio_live_controls')
+        .upsert({
+          edition_id: selectedEditionId,
+          is_active: selectedLiveControl?.is_active ?? false,
+          live_title: selectedLiveControl?.live_title ?? null,
+          show_heats: selectedLiveControl?.show_heats ?? false,
+          show_games: selectedLiveControl?.show_games ?? true,
+          show_partial_ranking: selectedLiveControl?.show_partial_ranking ?? true,
+          show_total_ranking: selectedLiveControl?.show_total_ranking ?? true,
+          triplice_winner_contrada_id: selectedLiveControl?.triplice_winner_contrada_id ?? null,
+          draw_revealed_count: selectedLiveControl?.draw_revealed_count ?? 0,
+          heats_focus_game: field === 'heats_focus_game' ? value : selectedLiveControl?.heats_focus_game ?? null,
+          games_focus_game: field === 'games_focus_game' ? value : selectedLiveControl?.games_focus_game ?? null,
+        }, { onConflict: 'edition_id' });
+      if (error) {
+        setRegiaStatusMessage(`Errore aggiornamento selezione gioco: ${error.message}`);
         return;
       }
       await fetchLiveControls();
@@ -689,6 +729,8 @@ function PalioResultsInputContent() {
           show_total_ranking: selectedLiveControl?.show_total_ranking ?? true,
           triplice_winner_contrada_id: selectedLiveControl?.triplice_winner_contrada_id ?? null,
           draw_revealed_count: selectedLiveControl?.draw_revealed_count ?? 0,
+          heats_focus_game: selectedLiveControl?.heats_focus_game ?? null,
+          games_focus_game: selectedLiveControl?.games_focus_game ?? null,
         }, { onConflict: 'edition_id' });
       if (error) {
         setRegiaStatusMessage(`Errore salvataggio titolo diretta: ${error.message}`);
@@ -722,6 +764,8 @@ function PalioResultsInputContent() {
           show_total_ranking: selectedLiveControl?.show_total_ranking ?? true,
           triplice_winner_contrada_id: normalizedWinnerId,
           draw_revealed_count: selectedLiveControl?.draw_revealed_count ?? 0,
+          heats_focus_game: selectedLiveControl?.heats_focus_game ?? null,
+          games_focus_game: selectedLiveControl?.games_focus_game ?? null,
         }, { onConflict: 'edition_id' });
       if (error) {
         setRegiaStatusMessage(`Errore salvataggio vincitore Triplice Tenzone: ${error.message}`);
@@ -755,6 +799,8 @@ function PalioResultsInputContent() {
           show_total_ranking: selectedLiveControl?.show_total_ranking ?? true,
           triplice_winner_contrada_id: selectedLiveControl?.triplice_winner_contrada_id ?? null,
           draw_revealed_count: normalizedCount,
+          heats_focus_game: selectedLiveControl?.heats_focus_game ?? null,
+          games_focus_game: selectedLiveControl?.games_focus_game ?? null,
         }, { onConflict: 'edition_id' });
       if (error) {
         setRegiaStatusMessage(`Errore aggiornamento estrazioni: ${error.message}`);
@@ -1285,6 +1331,37 @@ function PalioResultsInputContent() {
                   </button>
                 );
               })}
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-stone-500">
+                Batterie da mostrare
+                <select
+                  value={selectedLiveControl?.heats_focus_game ?? ''}
+                  onChange={(e) => handleSetFocusGame('heats_focus_game', (e.target.value || null) as PalioGame | null)}
+                  disabled={!selectedEditionId || savingLiveField === 'heats_focus_game' || !(selectedLiveControl?.show_heats ?? false)}
+                  className="rounded-md border border-stone-700 bg-stone-950 px-3 py-1.5 text-sm font-medium normal-case text-stone-200 disabled:opacity-50"
+                >
+                  <option value="">Tutte le batterie</option>
+                  {availableHeatGames.map((g) => (
+                    <option key={g} value={g}>Solo {liveGameLabels[g]}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-stone-500">
+                Risultati prova da mostrare
+                <select
+                  value={selectedLiveControl?.games_focus_game ?? ''}
+                  onChange={(e) => handleSetFocusGame('games_focus_game', (e.target.value || null) as PalioGame | null)}
+                  disabled={!selectedEditionId || savingLiveField === 'games_focus_game' || !(selectedLiveControl?.show_games ?? true)}
+                  className="rounded-md border border-stone-700 bg-stone-950 px-3 py-1.5 text-sm font-medium normal-case text-stone-200 disabled:opacity-50"
+                >
+                  <option value="">Tutti i risultati</option>
+                  {availableGames.map((g) => (
+                    <option key={g} value={g}>Solo {liveGameLabels[g]}</option>
+                  ))}
+                </select>
+              </label>
             </div>
 
             {currentMonth === 'ottobre' && (
