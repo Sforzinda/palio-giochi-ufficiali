@@ -45,7 +45,7 @@ const emptyResultRow = (participantId: string): AuspiciResultInput => ({
 
 const allAuspiciCarteTypes: AuspiciCartaType[] = ['duca', 'duchessa', 'armato', 'fornaio', 'mastro_falconiere'];
 
-function AuspiciGestioneContent() {
+export function AuspiciGestioneContent() {
   const supabase = useMemo(() => getSupabaseClient(), []);
   const [contrade, setContrade] = useState<Contrada[]>([]);
   const [editions, setEditions] = useState<AuspiciEdition[]>([]);
