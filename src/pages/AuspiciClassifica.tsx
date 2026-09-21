@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Flag, Sparkles, Trophy } from 'lucide-react';
 import sforzindaLogo from '../assets/sforzinda-logo-inverted.png';
 import { getContradaStemma } from '../lib/contrada-stemmi';
@@ -10,17 +11,59 @@ import { auspiciProvaLabels, auspiciProvaOrder, getAuspiciPoints } from '../lib/
 // I partecipanti possono includere squadre extra non ufficiali valide solo
 // per questo evento, oltre alle 12 Contrade: lo stemma viene mostrato solo
 // quando il nome corrisponde a una Contrada ufficiale.
+//
+// Pensata per uno schermo/proiettore in sala: il contenuto non deve mai
+// richiedere scroll, qualunque sia il numero di squadre o di prove concluse.
+// useFitScale misura l'altezza/larghezza naturali del contenuto e le
+// confronta con lo spazio disponibile sotto l'header, riducendo (mai
+// ingrandendo) il contenuto con un transform scale finché non ci sta tutto.
+
+function useFitScale<Content extends HTMLElement, Container extends HTMLElement>() {
+  const containerRef = useRef<Container | null>(null);
+  const contentRef = useRef<Content | null>(null);
+  const [scale, setScale] = useState(1);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    const content = contentRef.current;
+    if (!container || !content) return;
+
+    function recompute() {
+      const container = containerRef.current;
+      const content = contentRef.current;
+      if (!container || !content) return;
+
+      const contentWidth = content.scrollWidth;
+      const contentHeight = content.scrollHeight;
+      if (contentWidth === 0 || contentHeight === 0) return;
+
+      const availableWidth = container.clientWidth;
+      const availableHeight = container.clientHeight;
+      const nextScale = Math.min(1, availableWidth / contentWidth, availableHeight / contentHeight);
+      setScale(Number.isFinite(nextScale) && nextScale > 0 ? nextScale : 1);
+    }
+
+    recompute();
+    const resizeObserver = new ResizeObserver(recompute);
+    resizeObserver.observe(container);
+    resizeObserver.observe(content);
+    return () => resizeObserver.disconnect();
+  });
+
+  return { containerRef, contentRef, scale };
+}
 
 export function AuspiciClassifica() {
   const { carte, edition, loading, participants, ranking } = useAuspiciData('auspici-classifica-page');
   const totalParticipants = participants.length;
+  const { containerRef, contentRef, scale } = useFitScale<HTMLDivElement, HTMLDivElement>();
 
   return (
-    <div className="min-h-screen bg-[#180f0a] text-amber-50">
-      <div className="relative min-h-screen bg-[radial-gradient(circle_at_top_left,#7a2f18_0,#2a140c_34%,#120b08_72%)]">
+    <div className="h-screen overflow-hidden bg-[#180f0a] text-amber-50">
+      <div className="relative flex h-full flex-col bg-[radial-gradient(circle_at_top_left,#7a2f18_0,#2a140c_34%,#120b08_72%)]">
         <div className="pointer-events-none absolute inset-0 opacity-20 [background-image:linear-gradient(90deg,rgba(255,244,194,.12)_1px,transparent_1px),linear-gradient(rgba(255,244,194,.12)_1px,transparent_1px)] [background-size:42px_42px]" />
 
-        <header className="relative z-10 flex items-center justify-between gap-3 border-b border-amber-200/20 px-4 py-3 sm:px-6">
+        <header className="relative z-10 flex shrink-0 items-center justify-between gap-3 border-b border-amber-200/20 px-4 py-3 sm:px-6">
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-200/70 sm:text-xs">
               <Flag aria-hidden="true" className="h-3 w-3 shrink-0 sm:h-4 sm:w-4" />
@@ -33,13 +76,13 @@ export function AuspiciClassifica() {
           <img alt="Sforzinda" className="h-8 w-8 shrink-0 object-contain sm:h-10 sm:w-10" src={sforzindaLogo} />
         </header>
 
-        <main className="relative z-10 space-y-4 p-3 pb-10 sm:p-6">
+        <main className="relative z-10 min-h-0 flex-1 p-3 sm:p-6" ref={containerRef}>
           {loading ? (
-            <div className="flex items-center justify-center rounded-xl border border-amber-200/20 bg-black/20 py-16">
+            <div className="flex h-full items-center justify-center rounded-xl border border-amber-200/20 bg-black/20">
               <p className="text-base font-semibold text-amber-100">Caricamento classifica...</p>
             </div>
           ) : !edition ? (
-            <div className="flex flex-col items-center justify-center rounded-xl border border-amber-200/20 bg-black/20 py-16 text-center">
+            <div className="flex h-full flex-col items-center justify-center rounded-xl border border-amber-200/20 bg-black/20 text-center">
               <Sparkles aria-hidden="true" className="h-10 w-10 text-amber-300" />
               <h2 className="mt-3 text-2xl font-black text-amber-100">Classifica non ancora pubblicata</h2>
               <p className="mt-1.5 px-6 text-sm text-amber-100/70">
@@ -47,7 +90,11 @@ export function AuspiciClassifica() {
               </p>
             </div>
           ) : (
-            <>
+            <div
+              className="mx-auto w-full max-w-5xl origin-top"
+              ref={contentRef}
+              style={{ transform: `scale(${scale})` }}
+            >
               <section className="rounded-xl border border-amber-200/25 bg-black/20 p-3 sm:p-4">
                 <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-amber-200/60">
                   <Trophy aria-hidden="true" className="h-4 w-4" />
@@ -78,7 +125,7 @@ export function AuspiciClassifica() {
                 </div>
               </section>
 
-              <section className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
+              <section className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
                 {auspiciProvaOrder.map((prova) => {
                   const provaRanking = ranking
                     .map((item) => ({ item, result: item.provaResults[prova] }))
@@ -114,7 +161,7 @@ export function AuspiciClassifica() {
               </section>
 
               {carte.length > 0 && (
-                <section className="rounded-xl border border-amber-200/20 bg-black/20 p-3">
+                <section className="mt-4 rounded-xl border border-amber-200/20 bg-black/20 p-3">
                   <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-amber-200/60">
                     Carte Auspicio assegnate
                   </h3>
@@ -134,7 +181,7 @@ export function AuspiciClassifica() {
                   </div>
                 </section>
               )}
-            </>
+            </div>
           )}
         </main>
       </div>
