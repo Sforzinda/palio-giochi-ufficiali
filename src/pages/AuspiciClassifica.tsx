@@ -1,8 +1,9 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Flag, Sparkles, Trophy } from 'lucide-react';
 import sforzindaLogo from '../assets/sforzinda-logo-inverted.png';
 import { getContradaStemma } from '../lib/contrada-stemmi';
 import { useAuspiciData } from '../hooks/useAuspiciData';
+import type { AuspiciProva } from '../hooks/useAuspiciData';
 import { auspiciProvaLabels, auspiciProvaOrder, getAuspiciPoints } from '../lib/auspici-results';
 
 // Vista pubblica della classifica della Cena degli Auspici. Competizione
@@ -12,13 +13,17 @@ import { auspiciProvaLabels, auspiciProvaOrder, getAuspiciPoints } from '../lib/
 // per questo evento, oltre alle 12 Contrade: lo stemma viene mostrato solo
 // quando il nome corrisponde a una Contrada ufficiale.
 //
-// Pensata per uno schermo/proiettore in sala: il contenuto non deve mai
-// richiedere scroll, qualunque sia il numero di squadre o di prove concluse.
-// useFitScale misura l'altezza/larghezza naturali del contenuto e le
-// confronta con lo spazio disponibile sotto l'header, riducendo (mai
-// ingrandendo) il contenuto con un transform scale finché non ci sta tutto.
+// Pensata per uno schermo/proiettore in sala: le classifiche (generale +
+// una per ogni prova conclusa + carte assegnate) ruotano automaticamente
+// una alla volta, invece di stare tutte assieme in un'unica schermata.
+// useFitScale misura l'altezza/larghezza naturali della pagina corrente e le
+// confronta con lo spazio disponibile sotto l'header, scalando il contenuto
+// (in entrambe le direzioni, anche ingrandendo) finché non riempie al meglio
+// lo schermo senza richiedere scroll.
 
-function useFitScale<Content extends HTMLElement, Container extends HTMLElement>() {
+const ROTATION_INTERVAL_MS = 8000;
+
+function useFitScale<Content extends HTMLElement, Container extends HTMLElement>(dependency: unknown) {
   const containerRef = useRef<Container | null>(null);
   const contentRef = useRef<Content | null>(null);
   const [scale, setScale] = useState(1);
@@ -39,7 +44,7 @@ function useFitScale<Content extends HTMLElement, Container extends HTMLElement>
 
       const availableWidth = container.clientWidth;
       const availableHeight = container.clientHeight;
-      const nextScale = Math.min(1, availableWidth / contentWidth, availableHeight / contentHeight);
+      const nextScale = Math.min(availableWidth / contentWidth, availableHeight / contentHeight);
       setScale(Number.isFinite(nextScale) && nextScale > 0 ? nextScale : 1);
     }
 
@@ -48,15 +53,47 @@ function useFitScale<Content extends HTMLElement, Container extends HTMLElement>
     resizeObserver.observe(container);
     resizeObserver.observe(content);
     return () => resizeObserver.disconnect();
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dependency]);
 
   return { containerRef, contentRef, scale };
 }
 
+type ClassificaPage = { type: 'ranking' } | { type: 'carte' } | { prova: AuspiciProva; type: 'prova' };
+
 export function AuspiciClassifica() {
   const { carte, edition, loading, participants, ranking } = useAuspiciData('auspici-classifica-page');
   const totalParticipants = participants.length;
-  const { containerRef, contentRef, scale } = useFitScale<HTMLDivElement, HTMLDivElement>();
+
+  const pages = useMemo<ClassificaPage[]>(() => {
+    const result: ClassificaPage[] = [];
+    if (ranking.length > 0) result.push({ type: 'ranking' });
+    for (const prova of auspiciProvaOrder) {
+      const hasResults = ranking.some(
+        (item) => item.provaResults[prova]?.position !== null && item.provaResults[prova]?.position !== undefined
+      );
+      if (hasResults) result.push({ prova, type: 'prova' });
+    }
+    if (carte.length > 0) result.push({ type: 'carte' });
+    return result;
+  }, [carte, ranking]);
+
+  const [pageIndex, setPageIndex] = useState(0);
+
+  useEffect(() => {
+    setPageIndex(0);
+  }, [edition?.id]);
+
+  useEffect(() => {
+    if (pages.length <= 1) return;
+    const interval = setInterval(() => {
+      setPageIndex((prev) => (prev + 1) % pages.length);
+    }, ROTATION_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [pages.length]);
+
+  const currentPage = pages.length > 0 ? pages[pageIndex % pages.length] : null;
+  const { containerRef, contentRef, scale } = useFitScale<HTMLDivElement, HTMLDivElement>(currentPage);
 
   return (
     <div className="h-screen overflow-hidden bg-[#180f0a] text-amber-50">
@@ -89,80 +126,93 @@ export function AuspiciClassifica() {
                 La classifica della Cena degli Auspici sarà visibile quando la regia pubblicherà l&rsquo;edizione.
               </p>
             </div>
+          ) : !currentPage ? (
+            <div className="flex h-full flex-col items-center justify-center rounded-xl border border-amber-200/20 bg-black/20 text-center">
+              <Sparkles aria-hidden="true" className="h-10 w-10 text-amber-300" />
+              <h2 className="mt-3 text-2xl font-black text-amber-100">Nessun risultato ancora disponibile</h2>
+            </div>
           ) : (
             <div
-              className="mx-auto w-full max-w-5xl origin-top"
+              className="mx-auto w-fit origin-center"
               ref={contentRef}
               style={{ transform: `scale(${scale})` }}
             >
-              <section className="rounded-xl border border-amber-200/25 bg-black/20 p-3 sm:p-4">
-                <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-amber-200/60">
-                  <Trophy aria-hidden="true" className="h-4 w-4" />
-                  Classifica generale — Punti Auspicio
-                </div>
-                <div className="space-y-1.5">
-                  {ranking.map((item) => (
-                    <div
-                      className="grid grid-cols-[32px_36px_minmax(0,1fr)_64px] items-center gap-2 rounded-lg bg-amber-50/10 px-3 py-2 sm:grid-cols-[40px_44px_minmax(0,1fr)_80px]"
-                      key={item.id}
-                    >
-                      <span className="text-lg font-black text-amber-300 sm:text-xl">{item.rank}°</span>
-                      {getContradaStemma(item.name) ? (
-                        <img
-                          alt=""
-                          className="h-7 w-7 shrink-0 rounded-full object-cover sm:h-9 sm:w-9"
-                          src={getContradaStemma(item.name)}
-                        />
-                      ) : (
-                        <span className="h-7 w-7 shrink-0 sm:h-9 sm:w-9" />
-                      )}
-                      <span className="truncate text-sm font-bold text-amber-50 sm:text-base">{item.name}</span>
-                      <span className="text-right text-sm font-black text-amber-200 sm:text-base">
-                        {item.totalPoints.toLocaleString('it-IT')} pt
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-
-              <section className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
-                {auspiciProvaOrder.map((prova) => {
-                  const provaRanking = ranking
-                    .map((item) => ({ item, result: item.provaResults[prova] }))
-                    .filter((entry) => entry.result?.position !== null && entry.result?.position !== undefined)
-                    .sort((a, b) => (a.result!.position! - b.result!.position!));
-
-                  if (provaRanking.length === 0) return null;
-
-                  return (
-                    <div className="rounded-xl border border-amber-200/20 bg-black/20 p-3" key={prova}>
-                      <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-amber-200/60">
-                        {auspiciProvaLabels[prova]}
-                      </h3>
-                      <div className="space-y-1">
-                        {provaRanking.map(({ item, result }) => (
-                          <div
-                            className="flex items-center justify-between gap-2 rounded bg-amber-50/5 px-2 py-1 text-sm"
-                            key={item.id}
-                          >
-                            <span className="flex min-w-0 items-center gap-2">
-                              <span className="font-bold text-amber-300">{result!.position}°</span>
-                              <span className="truncate text-amber-50">{item.name}</span>
-                            </span>
-                            <span className="shrink-0 font-semibold text-amber-200/80">
-                              {getAuspiciPoints(result!.position, totalParticipants)?.toLocaleString('it-IT')} pt
-                            </span>
-                          </div>
-                        ))}
+              {currentPage.type === 'ranking' && (
+                <section className="w-[min(90vw,640px)] rounded-xl border border-amber-200/25 bg-black/20 p-3 sm:p-4">
+                  <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-amber-200/60">
+                    <Trophy aria-hidden="true" className="h-4 w-4" />
+                    Classifica generale — Punti Auspicio
+                  </div>
+                  <div className="space-y-1.5">
+                    {ranking.map((item) => (
+                      <div
+                        className="grid grid-cols-[32px_36px_minmax(0,1fr)_64px] items-center gap-2 rounded-lg bg-amber-50/10 px-3 py-2 sm:grid-cols-[40px_44px_minmax(0,1fr)_80px]"
+                        key={item.id}
+                      >
+                        <span className="text-lg font-black text-amber-300 sm:text-xl">{item.rank}°</span>
+                        {getContradaStemma(item.name) ? (
+                          <img
+                            alt=""
+                            className="h-7 w-7 shrink-0 rounded-full object-cover sm:h-9 sm:w-9"
+                            src={getContradaStemma(item.name)}
+                          />
+                        ) : (
+                          <span className="h-7 w-7 shrink-0 sm:h-9 sm:w-9" />
+                        )}
+                        <span className="truncate text-sm font-bold text-amber-50 sm:text-base">{item.name}</span>
+                        <span className="text-right text-sm font-black text-amber-200 sm:text-base">
+                          {item.totalPoints.toLocaleString('it-IT')} pt
+                        </span>
                       </div>
-                    </div>
-                  );
-                })}
-              </section>
+                    ))}
+                  </div>
+                </section>
+              )}
 
-              {carte.length > 0 && (
-                <section className="mt-4 rounded-xl border border-amber-200/20 bg-black/20 p-3">
-                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-amber-200/60">
+              {currentPage.type === 'prova' && (() => {
+                const prova = currentPage.prova;
+                const provaRanking = ranking
+                  .map((item) => ({ item, result: item.provaResults[prova] }))
+                  .filter((entry) => entry.result?.position !== null && entry.result?.position !== undefined)
+                  .sort((a, b) => (a.result!.position! - b.result!.position!));
+
+                return (
+                  <section className="w-[min(90vw,640px)] rounded-xl border border-amber-200/20 bg-black/20 p-3 sm:p-4">
+                    <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-amber-200/60">
+                      <Trophy aria-hidden="true" className="h-4 w-4" />
+                      {auspiciProvaLabels[prova]}
+                    </h3>
+                    <div className="space-y-1.5">
+                      {provaRanking.map(({ item, result }) => (
+                        <div
+                          className="grid grid-cols-[32px_36px_minmax(0,1fr)_64px] items-center gap-2 rounded-lg bg-amber-50/10 px-3 py-2 sm:grid-cols-[40px_44px_minmax(0,1fr)_80px]"
+                          key={item.id}
+                        >
+                          <span className="text-lg font-black text-amber-300 sm:text-xl">{result!.position}°</span>
+                          {getContradaStemma(item.name) ? (
+                            <img
+                              alt=""
+                              className="h-7 w-7 shrink-0 rounded-full object-cover sm:h-9 sm:w-9"
+                              src={getContradaStemma(item.name)}
+                            />
+                          ) : (
+                            <span className="h-7 w-7 shrink-0 sm:h-9 sm:w-9" />
+                          )}
+                          <span className="truncate text-sm font-bold text-amber-50 sm:text-base">{item.name}</span>
+                          <span className="text-right text-sm font-black text-amber-200 sm:text-base">
+                            {getAuspiciPoints(result!.position, totalParticipants)?.toLocaleString('it-IT')} pt
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                );
+              })()}
+
+              {currentPage.type === 'carte' && (
+                <section className="w-[min(90vw,640px)] rounded-xl border border-amber-200/20 bg-black/20 p-3 sm:p-4">
+                  <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-amber-200/60">
+                    <Sparkles aria-hidden="true" className="h-4 w-4" />
                     Carte Auspicio assegnate
                   </h3>
                   <div className="flex flex-wrap gap-2 text-sm">
@@ -184,6 +234,19 @@ export function AuspiciClassifica() {
             </div>
           )}
         </main>
+
+        {pages.length > 1 && (
+          <div className="relative z-10 flex shrink-0 items-center justify-center gap-2 pb-3">
+            {pages.map((page, index) => (
+              <span
+                className={`h-1.5 rounded-full transition-all ${
+                  index === pageIndex % pages.length ? 'w-6 bg-amber-300' : 'w-1.5 bg-amber-200/30'
+                }`}
+                key={page.type === 'prova' ? page.prova : page.type}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
