@@ -49,3 +49,11 @@ ufficiali pubblici (vedi discussione issue #97).
 - [x] `/estrazioni` — `usePalioLiveData` + `PalioDraw` (porting da fantapalio)
 - [x] `/risultati` — vista live `PalioLive`/`PalioLiveMobile` + `PalioWinnerCelebration` (porting da fantapalio, senza le sfide Fanta)
 - [x] `/risultati/gestione` — `PalioResultsInput`: inserimento risultati ufficiali, gestione batterie (estrazione/modifica manuale) e correzione manuale del calcolo, dietro login + `can_manage_palio_games()`. Non chiama mai il ricalcolo punteggi Fanta (resta esclusivo dell'Admin del Fanta).
+- [x] Cena degli Auspici (competizione autonoma e **non ufficiale**, separata dai
+  Punti Palio — vedi Regolamento Cena degli Auspici): `useAuspiciData` +
+  `<AuspiciClassifica />` per la classifica pubblica, `<AuspiciGestione />` per
+  l'inserimento risultati delle 5 prove, bonus/penalità e Carte Auspicio,
+  dietro lo stesso login + `can_manage_palio_games()`. Usa tabelle `auspici_*`
+  dedicate (schema in [`sql/auspici-serata.sql`](sql/auspici-serata.sql)),
+  create sullo stesso progetto Supabase "Fanta" ma completamente separate da
+  `palio_*`: nessuna interferenza con le estrazioni/risultati ufficiali.

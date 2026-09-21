@@ -32,3 +32,26 @@ export { usePalioAuth } from './hooks/usePalioAuth'
 export type { PalioAuthState, PalioAuthStatus } from './hooks/usePalioAuth'
 export { PalioAuthGate } from './components/PalioAuthGate'
 export { PalioGestione } from './components/PalioGestione'
+
+export { useAuspiciData } from './hooks/useAuspiciData'
+export type {
+  AuspiciAdjustment,
+  AuspiciCarta,
+  AuspiciCartaType,
+  AuspiciData,
+  AuspiciEdition,
+  AuspiciProva,
+  AuspiciRankingItem,
+  AuspiciResult,
+} from './hooks/useAuspiciData'
+export {
+  auspiciCartaLabels,
+  auspiciProvaDirection,
+  auspiciProvaLabels,
+  auspiciProvaOrder,
+  auspiciProvaRawScoreLabels,
+  getAuspiciPoints,
+} from './lib/auspici-results'
+
+export { AuspiciClassifica } from './pages/AuspiciClassifica'
+export { AuspiciGestione } from './components/AuspiciGestione'
