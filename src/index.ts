@@ -40,6 +40,7 @@ export type {
   AuspiciCartaType,
   AuspiciData,
   AuspiciEdition,
+  AuspiciParticipant,
   AuspiciProva,
   AuspiciRankingItem,
   AuspiciResult,

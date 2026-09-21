@@ -2,14 +2,18 @@ import { Flag, Sparkles, Trophy } from 'lucide-react';
 import sforzindaLogo from '../assets/sforzinda-logo-inverted.png';
 import { getContradaStemma } from '../lib/contrada-stemmi';
 import { useAuspiciData } from '../hooks/useAuspiciData';
-import { auspiciProvaLabels, auspiciProvaOrder } from '../lib/auspici-results';
+import { auspiciProvaLabels, auspiciProvaOrder, getAuspiciPoints } from '../lib/auspici-results';
 
 // Vista pubblica della classifica della Cena degli Auspici. Competizione
 // autonoma e non ufficiale (Regolamento, punto 1): niente Punti Palio, niente
 // interferenza con le estrazioni/risultati ufficiali mostrati da <PalioLive />.
+// I partecipanti possono includere squadre extra non ufficiali valide solo
+// per questo evento, oltre alle 12 Contrade: lo stemma viene mostrato solo
+// quando il nome corrisponde a una Contrada ufficiale.
 
 export function AuspiciClassifica() {
-  const { carte, edition, loading, ranking } = useAuspiciData('auspici-classifica-page');
+  const { carte, edition, loading, participants, ranking } = useAuspiciData('auspici-classifica-page');
+  const totalParticipants = participants.length;
 
   return (
     <div className="min-h-screen bg-[#180f0a] text-amber-50">
@@ -99,7 +103,7 @@ export function AuspiciClassifica() {
                               <span className="truncate text-amber-50">{item.name}</span>
                             </span>
                             <span className="shrink-0 font-semibold text-amber-200/80">
-                              {(13 - result!.position!).toLocaleString('it-IT')} pt
+                              {getAuspiciPoints(result!.position, totalParticipants)?.toLocaleString('it-IT')} pt
                             </span>
                           </div>
                         ))}
@@ -116,13 +120,13 @@ export function AuspiciClassifica() {
                   </h3>
                   <div className="flex flex-wrap gap-2 text-sm">
                     {carte.map((carta) => {
-                      const contradaName = ranking.find((item) => item.id === carta.contrada_id)?.name ?? '';
+                      const participantName = ranking.find((item) => item.id === carta.participant_id)?.name ?? '';
                       return (
                         <span
                           className={`rounded-full border px-3 py-1 ${carta.used ? 'border-amber-200/20 text-amber-100/50' : 'border-amber-300/50 text-amber-100'}`}
-                          key={`${carta.contrada_id}-${carta.carta}`}
+                          key={`${carta.participant_id}-${carta.carta}`}
                         >
-                          {contradaName}
+                          {participantName}
                           {carta.used ? ' (usata)' : ''}
                         </span>
                       );

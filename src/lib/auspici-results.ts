@@ -6,15 +6,17 @@ import type { AuspiciProva } from '../hooks/useAuspiciData';
 // grezza (raw_score) già riassuntiva — somma piazzamenti, lettere corrette,
 // punti bersaglio, punti giudici — calcolata dai giudici secondo il
 // Regolamento Cena degli Auspici; qui si applica solo il piazzamento
-// (1°-12°, pari merito compreso) e il punteggio 12→1 già usato nei Giochi
-// del Palio [regolamento punto 4].
+// (par merito compreso) e la scala di punti N, N-1, ..., 1 già usata nei
+// Giochi del Palio [regolamento punto 4], generalizzata al numero effettivo
+// di partecipanti (che può superare le 12 Contrade ufficiali per via delle
+// squadre extra valide solo per questo evento).
 
 export interface AuspiciResultInput {
-  contrada_id: string;
-  raw_score: string;
-  position: string;
   is_position_overridden: boolean;
   notes: string;
+  participant_id: string;
+  position: string;
+  raw_score: string;
 }
 
 export interface AuspiciCalculatedResultRow extends AuspiciResultInput {
@@ -57,11 +59,13 @@ export const auspiciCartaLabels: Record<'duca' | 'duchessa' | 'armato' | 'fornai
   mastro_falconiere: 'Mastro Falconiere – Comando',
 };
 
-export const getAuspiciPoints = (position: number | null): number | null =>
-  position === null ? null : 13 - position;
+// N, N-1, ..., 1 sul numero effettivo di partecipanti dell'edizione (non
+// fisso a 12, per via delle eventuali squadre extra dell'evento).
+export const getAuspiciPoints = (position: number | null, totalParticipants: number): number | null =>
+  position === null ? null : totalParticipants + 1 - position;
 
 const rankAuspiciValues = (
-  items: { contrada_id: string; value: number | null }[],
+  items: { participant_id: string; value: number | null }[],
   direction: 'asc' | 'desc'
 ): Map<string, number | null> => {
   const validValues = items
@@ -71,13 +75,13 @@ const rankAuspiciValues = (
 
   items.forEach((item) => {
     if (item.value === null || Number.isNaN(item.value)) {
-      ranks.set(item.contrada_id, null);
+      ranks.set(item.participant_id, null);
       return;
     }
     const betterCount = validValues.filter((value) =>
       direction === 'asc' ? value < item.value! : value > item.value!
     ).length;
-    ranks.set(item.contrada_id, betterCount + 1);
+    ranks.set(item.participant_id, betterCount + 1);
   });
 
   return ranks;
@@ -85,14 +89,15 @@ const rankAuspiciValues = (
 
 export function calculateAuspiciRows(rows: AuspiciResultInput[], prova: AuspiciProva): AuspiciCalculatedResultRow[] {
   const direction = auspiciProvaDirection[prova];
+  const totalParticipants = rows.length;
   const values = rows.map((row) => ({
-    contrada_id: row.contrada_id,
+    participant_id: row.participant_id,
     value: parsePalioNumber(row.raw_score),
   }));
   const ranks = rankAuspiciValues(values, direction);
 
   return rows.map((row) => {
-    const calculatedPosition = ranks.get(row.contrada_id) ?? null;
+    const calculatedPosition = ranks.get(row.participant_id) ?? null;
     const position = row.is_position_overridden
       ? parsePalioInteger(row.position)
       : calculatedPosition;
@@ -100,7 +105,7 @@ export function calculateAuspiciRows(rows: AuspiciResultInput[], prova: AuspiciP
     return {
       ...row,
       position: position === null ? '' : String(position),
-      points: getAuspiciPoints(position),
+      points: getAuspiciPoints(position, totalParticipants),
     };
   });
 }
@@ -111,16 +116,16 @@ export function validateAuspiciRows(rows: AuspiciCalculatedResultRow[]): {
   completeCount: number;
   invalidCount: number;
   missingCount: number;
-  statusByContradaId: Map<string, AuspiciInputStatus>;
+  statusByParticipantId: Map<string, AuspiciInputStatus>;
 } {
-  const statusByContradaId = new Map<string, AuspiciInputStatus>();
+  const statusByParticipantId = new Map<string, AuspiciInputStatus>();
   let completeCount = 0;
   let invalidCount = 0;
   let missingCount = 0;
 
   rows.forEach((row) => {
     const position = row.position.trim() === '' ? null : Number.parseInt(row.position, 10);
-    const hasInvalidPosition = row.position.trim() !== '' && (position === null || Number.isNaN(position) || position < 1 || position > 12);
+    const hasInvalidPosition = row.position.trim() !== '' && (position === null || Number.isNaN(position) || position < 1);
     const hasInvalidRawScore = row.raw_score.trim() !== '' && parsePalioNumber(row.raw_score) === null;
     const status: AuspiciInputStatus = hasInvalidPosition || hasInvalidRawScore
       ? 'invalid'
@@ -128,11 +133,11 @@ export function validateAuspiciRows(rows: AuspiciCalculatedResultRow[]): {
         ? 'missing'
         : 'complete';
 
-    statusByContradaId.set(row.contrada_id, status);
+    statusByParticipantId.set(row.participant_id, status);
     if (status === 'complete') completeCount += 1;
     if (status === 'invalid') invalidCount += 1;
     if (status === 'missing') missingCount += 1;
   });
 
-  return { completeCount, invalidCount, missingCount, statusByContradaId };
+  return { completeCount, invalidCount, missingCount, statusByParticipantId };
 }

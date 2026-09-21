@@ -52,8 +52,15 @@ ufficiali pubblici (vedi discussione issue #97).
 - [x] Cena degli Auspici (competizione autonoma e **non ufficiale**, separata dai
   Punti Palio — vedi Regolamento Cena degli Auspici): `useAuspiciData` +
   `<AuspiciClassifica />` per la classifica pubblica, `<AuspiciGestione />` per
-  l'inserimento risultati delle 5 prove, bonus/penalità e Carte Auspicio,
-  dietro lo stesso login + `can_manage_palio_games()`. Usa tabelle `auspici_*`
-  dedicate (schema in [`sql/auspici-serata.sql`](sql/auspici-serata.sql)),
-  create sullo stesso progetto Supabase "Fanta" ma completamente separate da
-  `palio_*`: nessuna interferenza con le estrazioni/risultati ufficiali.
+  gestire il roster partecipanti, inserire i risultati delle 5 prove,
+  bonus/penalità e Carte Auspicio, dietro lo stesso login +
+  `can_manage_palio_games()`. I partecipanti (`auspici_participants`, scoped
+  per edizione) non coincidono necessariamente con le 12 Contrade ufficiali:
+  l'edizione può includere squadre extra valide solo per questo evento (es.
+  Corte Ducale, Sforzinda, Musici e Alfieri dell'Onda Sforzesca, Aurora
+  Noctis, Il Biancofiore, Armati del Duca, Arcieri del Duca) — i Punti
+  Auspicio si adattano al numero effettivo di partecipanti. Usa tabelle
+  `auspici_*` dedicate (schema in
+  [`sql/auspici-serata.sql`](sql/auspici-serata.sql)), create sullo stesso
+  progetto Supabase "Fanta" ma completamente separate da `palio_*`: nessuna
+  interferenza con le estrazioni/risultati ufficiali.

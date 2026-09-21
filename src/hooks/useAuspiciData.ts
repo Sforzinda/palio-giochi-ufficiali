@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getSupabaseClient } from '../config';
-import type { Contrada } from './usePalioLiveData';
 
 // La Cena degli Auspici è una competizione autonoma e non ufficiale: punti,
 // tabelle e RLS sono completamente separati dai Punti Palio (palio_* nel
 // resto del package). Vedi Regolamento Cena degli Auspici, punto 1.
+//
+// I partecipanti NON coincidono necessariamente con le 12 Contrade
+// ufficiali: l'edizione può includere squadre extra valide solo per questo
+// evento (es. Corte Ducale, Sforzinda, Musici e Alfieri dell'Onda Sforzesca,
+// Aurora Noctis, Il Biancofiore, Armati del Duca, Arcieri del Duca). Per
+// questo il roster è `auspici_participants`, scoped per edizione, non un
+// riferimento diretto a `contrade`.
 
 export type AuspiciProva = 'mercante' | 'memoria' | 'investitura' | 'tiro' | 'giuramento';
 export type AuspiciCartaType = 'duca' | 'duchessa' | 'armato' | 'fornaio' | 'mastro_falconiere';
@@ -16,25 +22,32 @@ export interface AuspiciEdition {
   is_active: boolean;
 }
 
+export interface AuspiciParticipant {
+  contrada_id: string | null;
+  id: string;
+  name: string;
+  sort_order: number;
+}
+
 export interface AuspiciResult {
-  contrada_id: string;
-  prova: AuspiciProva;
-  raw_score: number | string | null;
-  position: number | null;
   is_position_overridden: boolean;
   notes: string | null;
+  participant_id: string;
+  position: number | null;
+  prova: AuspiciProva;
+  raw_score: number | string | null;
 }
 
 export interface AuspiciAdjustment {
   id: string;
-  contrada_id: string;
+  participant_id: string;
   points: number;
   reason: string;
 }
 
 export interface AuspiciCarta {
-  contrada_id: string;
   carta: AuspiciCartaType;
+  participant_id: string;
   used: boolean;
 }
 
@@ -48,18 +61,22 @@ export interface AuspiciRankingItem {
   wins: number;
 }
 
+// Punti Auspicio: generalizza la scala N, N-1, ..., 1 del regolamento
+// (scritto per 12 Contrade) al numero effettivo di partecipanti
+// dell'edizione, così da valere anche con le squadre extra dell'evento.
 function buildAuspiciRanking(
-  contrade: Contrada[],
+  participants: AuspiciParticipant[],
   results: AuspiciResult[],
   adjustments: AuspiciAdjustment[]
 ): AuspiciRankingItem[] {
-  const byContrada = new Map<string, Omit<AuspiciRankingItem, 'rank'>>();
+  const totalParticipants = participants.length;
+  const byParticipant = new Map<string, Omit<AuspiciRankingItem, 'rank'>>();
 
-  contrade.forEach((contrada) => {
-    byContrada.set(contrada.id, {
+  participants.forEach((participant) => {
+    byParticipant.set(participant.id, {
       giuramentoPosition: null,
-      id: contrada.id,
-      name: contrada.name,
+      id: participant.id,
+      name: participant.name,
       provaResults: {},
       totalPoints: 0,
       wins: 0,
@@ -67,19 +84,19 @@ function buildAuspiciRanking(
   });
 
   results.forEach((result) => {
-    const item = byContrada.get(result.contrada_id);
+    const item = byParticipant.get(result.participant_id);
     if (!item) return;
     item.provaResults[result.prova] = result;
 
     if (result.position !== null) {
-      item.totalPoints += 13 - result.position;
+      item.totalPoints += totalParticipants + 1 - result.position;
       if (result.position === 1) item.wins += 1;
       if (result.prova === 'giuramento') item.giuramentoPosition = result.position;
     }
   });
 
   adjustments.forEach((adjustment) => {
-    const item = byContrada.get(adjustment.contrada_id);
+    const item = byParticipant.get(adjustment.participant_id);
     if (!item) return;
     item.totalPoints += adjustment.points;
   });
@@ -87,8 +104,8 @@ function buildAuspiciRanking(
   // Criteri di parità nella classifica finale (Regolamento, punto 4): a
   // parità di punti prevalgono maggior numero di vittorie e miglior
   // piazzamento nel Giuramento delle Contrade; persistendo la parità, le
-  // Contrade sono ex aequo.
-  const sorted = Array.from(byContrada.values()).sort((a, b) => {
+  // squadre sono ex aequo.
+  const sorted = Array.from(byParticipant.values()).sort((a, b) => {
     if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
     if (b.wins !== a.wins) return b.wins - a.wins;
     const aGiuramento = a.giuramentoPosition ?? Number.POSITIVE_INFINITY;
@@ -112,17 +129,17 @@ function buildAuspiciRanking(
 export interface AuspiciData {
   adjustments: AuspiciAdjustment[];
   carte: AuspiciCarta[];
-  contrade: Contrada[];
   edition: AuspiciEdition | null;
   loading: boolean;
+  participants: AuspiciParticipant[];
   ranking: AuspiciRankingItem[];
   results: AuspiciResult[];
 }
 
 export function useAuspiciData(channelName: string): AuspiciData {
   const supabase = useMemo(() => getSupabaseClient(), []);
-  const [contrade, setContrade] = useState<Contrada[]>([]);
   const [edition, setEdition] = useState<AuspiciEdition | null>(null);
+  const [participants, setParticipants] = useState<AuspiciParticipant[]>([]);
   const [results, setResults] = useState<AuspiciResult[]>([]);
   const [adjustments, setAdjustments] = useState<AuspiciAdjustment[]>([]);
   const [carte, setCarte] = useState<AuspiciCarta[]>([]);
@@ -146,6 +163,7 @@ export function useAuspiciData(channelName: string): AuspiciData {
     setEdition(activeEdition);
 
     if (!activeEdition) {
+      setParticipants([]);
       setResults([]);
       setAdjustments([]);
       setCarte([]);
@@ -154,30 +172,36 @@ export function useAuspiciData(channelName: string): AuspiciData {
     }
 
     const [
-      { data: contradeData, error: contradeError },
+      { data: participantsData, error: participantsError },
       { data: resultsData, error: resultsError },
       { data: adjustmentsData, error: adjustmentsError },
       { data: carteData, error: carteError },
     ] = await Promise.all([
-      supabase.from('contrade').select('id, name').order('name'),
+      supabase
+        .from('auspici_participants')
+        .select('id, name, contrada_id, sort_order')
+        .eq('edition_id', activeEdition.id)
+        .order('sort_order')
+        .order('name'),
       supabase
         .from('auspici_results')
-        .select('contrada_id, prova, raw_score, position, is_position_overridden, notes')
+        .select('participant_id, prova, raw_score, position, is_position_overridden, notes')
         .eq('edition_id', activeEdition.id),
       supabase
         .from('auspici_adjustments')
-        .select('id, contrada_id, points, reason')
+        .select('id, participant_id, points, reason')
         .eq('edition_id', activeEdition.id),
       supabase
         .from('auspici_carte')
-        .select('contrada_id, carta, used')
+        .select('participant_id, carta, used')
         .eq('edition_id', activeEdition.id),
     ]);
 
-    if (contradeError) {
-      console.error('Error fetching contrade:', contradeError);
+    if (participantsError) {
+      console.error('Error fetching auspici participants:', participantsError);
+      setParticipants([]);
     } else {
-      setContrade((contradeData as Contrada[]) ?? []);
+      setParticipants((participantsData as AuspiciParticipant[]) ?? []);
     }
 
     if (resultsError) {
@@ -212,6 +236,7 @@ export function useAuspiciData(channelName: string): AuspiciData {
     const channel = supabase
       .channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'auspici_editions' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'auspici_participants' }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'auspici_results' }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'auspici_adjustments' }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'auspici_carte' }, () => fetchData())
@@ -223,9 +248,9 @@ export function useAuspiciData(channelName: string): AuspiciData {
   }, [channelName, fetchData, supabase]);
 
   const ranking = useMemo(
-    () => buildAuspiciRanking(contrade, results, adjustments),
-    [adjustments, contrade, results]
+    () => buildAuspiciRanking(participants, results, adjustments),
+    [adjustments, participants, results]
   );
 
-  return { adjustments, carte, contrade, edition, loading, ranking, results };
+  return { adjustments, carte, edition, loading, participants, ranking, results };
 }

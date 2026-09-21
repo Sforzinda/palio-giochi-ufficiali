@@ -1,5 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { Eye, EyeOff, PlusCircle, Save, Trash2 } from 'lucide-react';
+import { Eye, EyeOff, PlusCircle, Save, Trash2, UserPlus, Users } from 'lucide-react';
 import { getSupabaseClient } from '../config';
 import { PalioAuthGate } from './PalioAuthGate';
 import type { Contrada } from '../hooks/usePalioLiveData';
@@ -8,6 +8,7 @@ import type {
   AuspiciCarta,
   AuspiciCartaType,
   AuspiciEdition,
+  AuspiciParticipant,
   AuspiciProva,
 } from '../hooks/useAuspiciData';
 import {
@@ -25,11 +26,19 @@ import { parsePalioNumber } from '../lib/palio-results';
 // autenticazione (can_manage_palio_games()) del pannello Giochi del Palio,
 // ma su tabelle auspici_* completamente separate. Non tocca mai palio_* né
 // il ricalcolo dei punteggi Fanta.
+//
+// Il roster partecipanti (auspici_participants) è scoped per edizione e non
+// coincide necessariamente con le 12 Contrade ufficiali: l'evento può
+// includere squadre extra valide solo per questa serata (es. Corte Ducale,
+// Sforzinda, Musici e Alfieri dell'Onda Sforzesca, Aurora Noctis, Il
+// Biancofiore, Armati del Duca, Arcieri del Duca). Le 12 ufficiali si
+// aggiungono con un pulsante di seeding da public.contrade; le squadre extra
+// si aggiungono digitando il nome.
 
-const emptyResultRow = (contradaId: string): AuspiciResultInput => ({
-  contrada_id: contradaId,
+const emptyResultRow = (participantId: string): AuspiciResultInput => ({
   is_position_overridden: false,
   notes: '',
+  participant_id: participantId,
   position: '',
   raw_score: '',
 });
@@ -42,13 +51,16 @@ function AuspiciGestioneContent() {
   const [editions, setEditions] = useState<AuspiciEdition[]>([]);
   const [selectedEditionId, setSelectedEditionId] = useState('');
   const [newYear, setNewYear] = useState(String(new Date().getFullYear()));
+  const [participants, setParticipants] = useState<AuspiciParticipant[]>([]);
+  const [newParticipantName, setNewParticipantName] = useState('');
   const [prova, setProva] = useState<AuspiciProva>('mercante');
   const [results, setResults] = useState<AuspiciResultInput[]>([]);
   const [adjustments, setAdjustments] = useState<AuspiciAdjustment[]>([]);
   const [carte, setCarte] = useState<AuspiciCarta[]>([]);
-  const [newAdjustment, setNewAdjustment] = useState({ contradaId: '', points: '', reason: '' });
+  const [newAdjustment, setNewAdjustment] = useState({ participantId: '', points: '', reason: '' });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingParticipants, setSavingParticipants] = useState(false);
   const [savingCarte, setSavingCarte] = useState(false);
   const [savingAdjustment, setSavingAdjustment] = useState(false);
   const [togglingActive, setTogglingActive] = useState(false);
@@ -66,6 +78,25 @@ function AuspiciGestioneContent() {
     setEditions((data as AuspiciEdition[]) ?? []);
   }, [supabase]);
 
+  const fetchParticipants = useCallback(async (editionId: string) => {
+    if (!editionId) {
+      setParticipants([]);
+      return;
+    }
+    const { data, error } = await supabase
+      .from('auspici_participants')
+      .select('id, name, contrada_id, sort_order')
+      .eq('edition_id', editionId)
+      .order('sort_order')
+      .order('name');
+    if (error) {
+      console.error('Error fetching auspici participants:', error);
+      setParticipants([]);
+      return;
+    }
+    setParticipants((data as AuspiciParticipant[]) ?? []);
+  }, [supabase]);
+
   const fetchAdjustments = useCallback(async (editionId: string) => {
     if (!editionId) {
       setAdjustments([]);
@@ -73,7 +104,7 @@ function AuspiciGestioneContent() {
     }
     const { data, error } = await supabase
       .from('auspici_adjustments')
-      .select('id, contrada_id, points, reason')
+      .select('id, participant_id, points, reason')
       .eq('edition_id', editionId);
     if (error) {
       console.error('Error fetching auspici adjustments:', error);
@@ -90,7 +121,7 @@ function AuspiciGestioneContent() {
     }
     const { data, error } = await supabase
       .from('auspici_carte')
-      .select('contrada_id, carta, used')
+      .select('participant_id, carta, used')
       .eq('edition_id', editionId);
     if (error) {
       console.error('Error fetching auspici carte:', error);
@@ -113,26 +144,32 @@ function AuspiciGestioneContent() {
   }, [fetchEditions, supabase]);
 
   useEffect(() => {
+    fetchParticipants(selectedEditionId);
     fetchAdjustments(selectedEditionId);
     fetchCarte(selectedEditionId);
-  }, [fetchAdjustments, fetchCarte, selectedEditionId]);
+  }, [fetchAdjustments, fetchCarte, fetchParticipants, selectedEditionId]);
 
   const selectedEdition = useMemo(
     () => editions.find((edition) => edition.id === selectedEditionId) ?? null,
     [editions, selectedEditionId]
   );
 
+  const missingOfficialContrade = useMemo(() => {
+    const participantNames = new Set(participants.map((p) => p.name));
+    return contrade.filter((c) => !participantNames.has(c.name));
+  }, [contrade, participants]);
+
   useEffect(() => {
     async function fetchResultsForProva() {
-      const empty = contrade.map((c) => emptyResultRow(c.id));
-      if (!selectedEditionId) {
+      const empty = participants.map((p) => emptyResultRow(p.id));
+      if (!selectedEditionId || participants.length === 0) {
         setResults(empty);
         return;
       }
 
       const { data, error } = await supabase
         .from('auspici_results')
-        .select('contrada_id, raw_score, position, is_position_overridden, notes')
+        .select('participant_id, raw_score, position, is_position_overridden, notes')
         .eq('edition_id', selectedEditionId)
         .eq('prova', prova);
 
@@ -142,35 +179,35 @@ function AuspiciGestioneContent() {
         return;
       }
 
-      const existingByContrada = new Map((data ?? []).map((row) => [row.contrada_id as string, row]));
+      const existingByParticipant = new Map((data ?? []).map((row) => [row.participant_id as string, row]));
       setResults(empty.map((row) => {
-        const existing = existingByContrada.get(row.contrada_id);
+        const existing = existingByParticipant.get(row.participant_id);
         if (!existing) return row;
         return {
-          contrada_id: row.contrada_id,
           is_position_overridden: Boolean(existing.is_position_overridden),
           notes: existing.notes ?? '',
+          participant_id: row.participant_id,
           position: existing.position === null ? '' : String(existing.position),
           raw_score: existing.raw_score === null ? '' : String(existing.raw_score),
         };
       }));
     }
     fetchResultsForProva();
-  }, [contrade, prova, selectedEditionId, supabase]);
+  }, [participants, prova, selectedEditionId, supabase]);
 
   const calculatedRows = useMemo(() => calculateAuspiciRows(results, prova), [prova, results]);
   const displayRows = useMemo(
     () => [...calculatedRows].sort((a, b) => {
-      const nameA = contrade.find((c) => c.id === a.contrada_id)?.name ?? '';
-      const nameB = contrade.find((c) => c.id === b.contrada_id)?.name ?? '';
+      const nameA = participants.find((p) => p.id === a.participant_id)?.name ?? '';
+      const nameB = participants.find((p) => p.id === b.participant_id)?.name ?? '';
       return nameA.localeCompare(nameB, 'it');
     }),
-    [calculatedRows, contrade]
+    [calculatedRows, participants]
   );
   const validation = useMemo(() => validateAuspiciRows(displayRows), [displayRows]);
 
-  function updateField(contradaId: string, field: keyof AuspiciResultInput, value: string | boolean) {
-    setResults((prev) => prev.map((row) => (row.contrada_id === contradaId ? { ...row, [field]: value } : row)));
+  function updateField(participantId: string, field: keyof AuspiciResultInput, value: string | boolean) {
+    setResults((prev) => prev.map((row) => (row.participant_id === participantId ? { ...row, [field]: value } : row)));
   }
 
   async function handleCreateEdition(e: FormEvent) {
@@ -226,6 +263,71 @@ function AuspiciGestioneContent() {
     }
   }
 
+  async function handleSeedOfficialContrade() {
+    if (!selectedEditionId || missingOfficialContrade.length === 0) return;
+    setSavingParticipants(true);
+    try {
+      const payload = missingOfficialContrade.map((c, index) => ({
+        contrada_id: c.id,
+        edition_id: selectedEditionId,
+        name: c.name,
+        sort_order: participants.length + index,
+      }));
+      const { error } = await supabase.from('auspici_participants').insert(payload);
+      if (error) {
+        setStatusMessage(`Errore aggiunta Contrade ufficiali: ${error.message}`);
+        return;
+      }
+      await fetchParticipants(selectedEditionId);
+      setStatusMessage('Contrade ufficiali aggiunte al roster');
+    } finally {
+      setSavingParticipants(false);
+    }
+  }
+
+  async function handleAddParticipant(e: FormEvent) {
+    e.preventDefault();
+    if (!selectedEditionId) {
+      setStatusMessage("Seleziona prima un'edizione");
+      return;
+    }
+    const name = newParticipantName.trim();
+    if (!name) return;
+
+    setSavingParticipants(true);
+    try {
+      const { error } = await supabase.from('auspici_participants').insert({
+        contrada_id: null,
+        edition_id: selectedEditionId,
+        name,
+        sort_order: participants.length,
+      });
+      if (error) {
+        setStatusMessage(`Errore aggiunta partecipante: ${error.message}`);
+        return;
+      }
+      setNewParticipantName('');
+      await fetchParticipants(selectedEditionId);
+      setStatusMessage(`«${name}» aggiunta al roster`);
+    } finally {
+      setSavingParticipants(false);
+    }
+  }
+
+  async function handleRemoveParticipant(participantId: string) {
+    setSavingParticipants(true);
+    try {
+      const { error } = await supabase.from('auspici_participants').delete().eq('id', participantId);
+      if (error) {
+        setStatusMessage(`Errore rimozione partecipante: ${error.message}`);
+        return;
+      }
+      await fetchParticipants(selectedEditionId);
+    } finally {
+      setSavingParticipants(false);
+    }
+  }
+
   async function handleSaveResults(e: FormEvent) {
     e.preventDefault();
     if (saving) return;
@@ -241,16 +343,16 @@ function AuspiciGestioneContent() {
     setSaving(true);
     try {
       const payload = displayRows.map((row) => ({
-        contrada_id: row.contrada_id,
         edition_id: selectedEditionId,
         is_position_overridden: row.is_position_overridden,
         notes: row.notes || null,
+        participant_id: row.participant_id,
         position: row.position ? Number.parseInt(row.position, 10) : null,
         prova,
         raw_score: parsePalioNumber(row.raw_score),
       }));
 
-      const { error } = await supabase.from('auspici_results').upsert(payload, { onConflict: 'edition_id,prova,contrada_id' });
+      const { error } = await supabase.from('auspici_results').upsert(payload, { onConflict: 'edition_id,prova,participant_id' });
       if (error) {
         setStatusMessage(`Errore salvataggio risultati: ${error.message}`);
         return;
@@ -268,8 +370,8 @@ function AuspiciGestioneContent() {
       setStatusMessage("Seleziona prima un'edizione");
       return;
     }
-    if (!newAdjustment.contradaId || !newAdjustment.reason.trim()) {
-      setStatusMessage('Seleziona una Contrada e indica un motivo');
+    if (!newAdjustment.participantId || !newAdjustment.reason.trim()) {
+      setStatusMessage('Seleziona un partecipante e indica un motivo');
       return;
     }
     const points = Number.parseInt(newAdjustment.points, 10);
@@ -281,8 +383,8 @@ function AuspiciGestioneContent() {
     setSavingAdjustment(true);
     try {
       const { error } = await supabase.from('auspici_adjustments').insert({
-        contrada_id: newAdjustment.contradaId,
         edition_id: selectedEditionId,
+        participant_id: newAdjustment.participantId,
         points,
         reason: newAdjustment.reason.trim(),
       });
@@ -290,7 +392,7 @@ function AuspiciGestioneContent() {
         setStatusMessage(`Errore salvataggio bonus/penalità: ${error.message}`);
         return;
       }
-      setNewAdjustment({ contradaId: '', points: '', reason: '' });
+      setNewAdjustment({ participantId: '', points: '', reason: '' });
       await fetchAdjustments(selectedEditionId);
       setStatusMessage('Bonus/penalità registrata');
     } finally {
@@ -307,7 +409,7 @@ function AuspiciGestioneContent() {
     await fetchAdjustments(selectedEditionId);
   }
 
-  async function handleAssignCarta(contradaId: string, carta: AuspiciCartaType | '') {
+  async function handleAssignCarta(participantId: string, carta: AuspiciCartaType | '') {
     if (!selectedEditionId) {
       setStatusMessage("Seleziona prima un'edizione");
       return;
@@ -315,7 +417,7 @@ function AuspiciGestioneContent() {
     setSavingCarte(true);
     try {
       if (!carta) {
-        const { error } = await supabase.from('auspici_carte').delete().eq('edition_id', selectedEditionId).eq('contrada_id', contradaId);
+        const { error } = await supabase.from('auspici_carte').delete().eq('edition_id', selectedEditionId).eq('participant_id', participantId);
         if (error) {
           setStatusMessage(`Errore rimozione carta: ${error.message}`);
           return;
@@ -323,7 +425,7 @@ function AuspiciGestioneContent() {
       } else {
         const { error } = await supabase
           .from('auspici_carte')
-          .upsert({ carta, contrada_id: contradaId, edition_id: selectedEditionId, used: false }, { onConflict: 'edition_id,contrada_id' });
+          .upsert({ carta, edition_id: selectedEditionId, participant_id: participantId, used: false }, { onConflict: 'edition_id,participant_id' });
         if (error) {
           setStatusMessage(`Errore assegnazione carta: ${error.message}`);
           return;
@@ -335,7 +437,7 @@ function AuspiciGestioneContent() {
     }
   }
 
-  async function handleToggleCartaUsed(contradaId: string, used: boolean) {
+  async function handleToggleCartaUsed(participantId: string, used: boolean) {
     if (!selectedEditionId) return;
     setSavingCarte(true);
     try {
@@ -343,7 +445,7 @@ function AuspiciGestioneContent() {
         .from('auspici_carte')
         .update({ used })
         .eq('edition_id', selectedEditionId)
-        .eq('contrada_id', contradaId);
+        .eq('participant_id', participantId);
       if (error) {
         setStatusMessage(`Errore aggiornamento carta: ${error.message}`);
         return;
@@ -362,8 +464,9 @@ function AuspiciGestioneContent() {
     <div className="mx-auto max-w-5xl px-4 py-8">
       <h1 className="font-medieval text-2xl font-bold text-stone-100">Gestione Cena degli Auspici</h1>
       <p className="mt-1 text-sm text-stone-400">
-        Scrive su <code>auspici_editions</code>, <code>auspici_results</code>, <code>auspici_adjustments</code> e{' '}
-        <code>auspici_carte</code> — tabelle separate dai Giochi del Palio. Nessun effetto sui Punti Palio o sul Fanta.
+        Scrive su <code>auspici_editions</code>, <code>auspici_participants</code>, <code>auspici_results</code>,{' '}
+        <code>auspici_adjustments</code> e <code>auspici_carte</code> — tabelle separate dai Giochi del Palio. Nessun
+        effetto sui Punti Palio o sul Fanta.
       </p>
 
       <div className="mt-6 flex flex-wrap items-end gap-3 rounded-lg border border-stone-800 bg-stone-900 p-4">
@@ -418,6 +521,68 @@ function AuspiciGestioneContent() {
       {selectedEditionId && (
         <>
           <section className="mt-6 rounded-lg border border-stone-800 bg-stone-900 p-4">
+            <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-stone-300">
+              <Users className="h-4 w-4" />
+              Squadre partecipanti ({participants.length})
+            </h2>
+            <p className="mt-1 text-xs text-stone-400">
+              Oltre alle 12 Contrade ufficiali, questa edizione può includere squadre extra valide solo per questo
+              evento (es. Corte Ducale, Sforzinda, Musici e Alfieri dell&rsquo;Onda Sforzesca, Aurora Noctis, Il
+              Biancofiore, Armati del Duca, Arcieri del Duca).
+            </p>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {missingOfficialContrade.length > 0 && (
+                <button
+                  className="inline-flex items-center gap-1.5 rounded-md border border-palio-500/50 px-3 py-1.5 text-sm font-semibold text-palio-300 hover:border-palio-400 disabled:opacity-50"
+                  disabled={savingParticipants}
+                  onClick={handleSeedOfficialContrade}
+                  type="button"
+                >
+                  <Users className="h-4 w-4" />
+                  Aggiungi le {missingOfficialContrade.length} Contrade ufficiali mancanti
+                </button>
+              )}
+            </div>
+
+            <form className="mt-3 flex items-end gap-2" onSubmit={handleAddParticipant}>
+              <label className="min-w-[220px] flex-1 text-sm font-semibold text-stone-300">
+                Nome squadra extra
+                <input
+                  className="ml-2 w-full rounded-md border border-stone-700 bg-stone-800 px-3 py-1.5 text-sm text-stone-100"
+                  onChange={(e) => setNewParticipantName(e.target.value)}
+                  placeholder="Es. Corte Ducale"
+                  value={newParticipantName}
+                />
+              </label>
+              <button
+                className="inline-flex items-center gap-1.5 rounded-md border border-palio-500/50 px-3 py-1.5 text-sm font-semibold text-palio-300 hover:border-palio-400 disabled:opacity-50"
+                disabled={savingParticipants || !newParticipantName.trim()}
+                type="submit"
+              >
+                <UserPlus className="h-4 w-4" />
+                Aggiungi
+              </button>
+            </form>
+
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {participants.map((participant) => (
+                <li
+                  className="flex items-center gap-2 rounded-full border border-stone-700 bg-stone-800 px-3 py-1 text-sm text-stone-200"
+                  key={participant.id}
+                >
+                  {participant.name}
+                  {!participant.contrada_id && <span className="text-[10px] uppercase text-amber-400">extra</span>}
+                  <button onClick={() => handleRemoveParticipant(participant.id)} type="button">
+                    <Trash2 className="h-3.5 w-3.5 text-stone-500 hover:text-red-400" />
+                  </button>
+                </li>
+              ))}
+              {participants.length === 0 && <li className="text-sm text-stone-500">Nessuna squadra ancora aggiunta</li>}
+            </ul>
+          </section>
+
+          <section className="mt-6 rounded-lg border border-stone-800 bg-stone-900 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <label className="text-sm font-semibold text-stone-300">
                 Prova
@@ -434,81 +599,85 @@ function AuspiciGestioneContent() {
               <p className="text-xs text-stone-400">{auspiciProvaRawScoreLabels[prova]}</p>
             </div>
 
-            <form className="mt-4 space-y-2" onSubmit={handleSaveResults}>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px] text-sm">
-                  <thead>
-                    <tr className="border-b border-stone-800 text-left text-xs uppercase tracking-wide text-stone-400">
-                      <th className="py-2 pr-3">Contrada</th>
-                      <th className="py-2 pr-3">Valore grezzo</th>
-                      <th className="py-2 pr-3">Posizione</th>
-                      <th className="py-2 pr-3">Punti</th>
-                      <th className="py-2 pr-3">Override manuale</th>
-                      <th className="py-2 pr-3">Note</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {displayRows.map((row) => {
-                      const status = validation.statusByContradaId.get(row.contrada_id);
-                      const name = contrade.find((c) => c.id === row.contrada_id)?.name ?? '';
-                      return (
-                        <tr className="border-b border-stone-800/60" key={row.contrada_id}>
-                          <td className="py-1.5 pr-3 font-semibold text-stone-200">{name}</td>
-                          <td className="py-1.5 pr-3">
-                            <input
-                              className="w-24 rounded border border-stone-700 bg-stone-800 px-2 py-1 text-stone-100"
-                              disabled={row.is_position_overridden}
-                              onChange={(e) => updateField(row.contrada_id, 'raw_score', e.target.value)}
-                              value={row.raw_score}
-                            />
-                          </td>
-                          <td className="py-1.5 pr-3">
-                            <input
-                              className={`w-16 rounded border px-2 py-1 text-stone-100 ${status === 'invalid' ? 'border-red-500 bg-red-950/40' : 'border-stone-700 bg-stone-800'}`}
-                              disabled={!row.is_position_overridden}
-                              onChange={(e) => updateField(row.contrada_id, 'position', e.target.value)}
-                              value={row.position}
-                            />
-                          </td>
-                          <td className="py-1.5 pr-3 font-semibold text-palio-300">
-                            {row.points ?? '-'}
-                          </td>
-                          <td className="py-1.5 pr-3">
-                            <input
-                              checked={row.is_position_overridden}
-                              onChange={(e) => updateField(row.contrada_id, 'is_position_overridden', e.target.checked)}
-                              type="checkbox"
-                            />
-                          </td>
-                          <td className="py-1.5 pr-3">
-                            <input
-                              className="w-full min-w-[140px] rounded border border-stone-700 bg-stone-800 px-2 py-1 text-stone-100"
-                              onChange={(e) => updateField(row.contrada_id, 'notes', e.target.value)}
-                              value={row.notes}
-                            />
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+            {participants.length === 0 ? (
+              <p className="mt-4 text-sm text-stone-500">Aggiungi prima le squadre partecipanti qui sopra.</p>
+            ) : (
+              <form className="mt-4 space-y-2" onSubmit={handleSaveResults}>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[640px] text-sm">
+                    <thead>
+                      <tr className="border-b border-stone-800 text-left text-xs uppercase tracking-wide text-stone-400">
+                        <th className="py-2 pr-3">Squadra</th>
+                        <th className="py-2 pr-3">Valore grezzo</th>
+                        <th className="py-2 pr-3">Posizione</th>
+                        <th className="py-2 pr-3">Punti</th>
+                        <th className="py-2 pr-3">Override manuale</th>
+                        <th className="py-2 pr-3">Note</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {displayRows.map((row) => {
+                        const status = validation.statusByParticipantId.get(row.participant_id);
+                        const name = participants.find((p) => p.id === row.participant_id)?.name ?? '';
+                        return (
+                          <tr className="border-b border-stone-800/60" key={row.participant_id}>
+                            <td className="py-1.5 pr-3 font-semibold text-stone-200">{name}</td>
+                            <td className="py-1.5 pr-3">
+                              <input
+                                className="w-24 rounded border border-stone-700 bg-stone-800 px-2 py-1 text-stone-100"
+                                disabled={row.is_position_overridden}
+                                onChange={(e) => updateField(row.participant_id, 'raw_score', e.target.value)}
+                                value={row.raw_score}
+                              />
+                            </td>
+                            <td className="py-1.5 pr-3">
+                              <input
+                                className={`w-16 rounded border px-2 py-1 text-stone-100 ${status === 'invalid' ? 'border-red-500 bg-red-950/40' : 'border-stone-700 bg-stone-800'}`}
+                                disabled={!row.is_position_overridden}
+                                onChange={(e) => updateField(row.participant_id, 'position', e.target.value)}
+                                value={row.position}
+                              />
+                            </td>
+                            <td className="py-1.5 pr-3 font-semibold text-palio-300">
+                              {row.points ?? '-'}
+                            </td>
+                            <td className="py-1.5 pr-3">
+                              <input
+                                checked={row.is_position_overridden}
+                                onChange={(e) => updateField(row.participant_id, 'is_position_overridden', e.target.checked)}
+                                type="checkbox"
+                              />
+                            </td>
+                            <td className="py-1.5 pr-3">
+                              <input
+                                className="w-full min-w-[140px] rounded border border-stone-700 bg-stone-800 px-2 py-1 text-stone-100"
+                                onChange={(e) => updateField(row.participant_id, 'notes', e.target.value)}
+                                value={row.notes}
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
 
-              <div className="flex items-center gap-3 pt-2">
-                <button
-                  className="inline-flex items-center gap-1.5 rounded-md bg-palio-500 px-4 py-2 text-sm font-semibold text-white hover:bg-palio-600 disabled:opacity-50"
-                  disabled={saving || validation.invalidCount > 0}
-                  type="submit"
-                >
-                  <Save className="h-4 w-4" />
-                  Salva {auspiciProvaLabels[prova]}
-                </button>
-                <p className="text-xs text-stone-400">
-                  {validation.completeCount}/{displayRows.length} complete
-                  {validation.invalidCount > 0 && ` · ${validation.invalidCount} da correggere`}
-                </p>
-              </div>
-            </form>
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    className="inline-flex items-center gap-1.5 rounded-md bg-palio-500 px-4 py-2 text-sm font-semibold text-white hover:bg-palio-600 disabled:opacity-50"
+                    disabled={saving || validation.invalidCount > 0}
+                    type="submit"
+                  >
+                    <Save className="h-4 w-4" />
+                    Salva {auspiciProvaLabels[prova]}
+                  </button>
+                  <p className="text-xs text-stone-400">
+                    {validation.completeCount}/{displayRows.length} complete
+                    {validation.invalidCount > 0 && ` · ${validation.invalidCount} da correggere`}
+                  </p>
+                </div>
+              </form>
+            )}
           </section>
 
           <section className="mt-6 rounded-lg border border-stone-800 bg-stone-900 p-4">
@@ -517,15 +686,15 @@ function AuspiciGestioneContent() {
             </h2>
             <form className="mt-3 flex flex-wrap items-end gap-2" onSubmit={handleAddAdjustment}>
               <label className="text-sm font-semibold text-stone-300">
-                Contrada
+                Squadra
                 <select
                   className="ml-2 rounded-md border border-stone-700 bg-stone-800 px-3 py-1.5 text-sm text-stone-100"
-                  onChange={(e) => setNewAdjustment((prev) => ({ ...prev, contradaId: e.target.value }))}
-                  value={newAdjustment.contradaId}
+                  onChange={(e) => setNewAdjustment((prev) => ({ ...prev, participantId: e.target.value }))}
+                  value={newAdjustment.participantId}
                 >
                   <option value="">Seleziona</option>
-                  {contrade.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                  {participants.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
                 </select>
               </label>
@@ -561,7 +730,7 @@ function AuspiciGestioneContent() {
                 <li className="flex items-center justify-between gap-2 rounded border border-stone-800 px-3 py-1.5 text-sm" key={adjustment.id}>
                   <span>
                     <span className="font-semibold text-stone-200">
-                      {contrade.find((c) => c.id === adjustment.contrada_id)?.name ?? '—'}
+                      {participants.find((p) => p.id === adjustment.participant_id)?.name ?? '—'}
                     </span>{' '}
                     <span className={adjustment.points >= 0 ? 'text-emerald-400' : 'text-red-400'}>
                       {adjustment.points >= 0 ? `+${adjustment.points}` : adjustment.points}
@@ -582,15 +751,15 @@ function AuspiciGestioneContent() {
               Carte Auspicio — Ombre sul Ducato
             </h2>
             <div className="mt-3 space-y-1.5">
-              {contrade.map((contrada) => {
-                const assigned = carte.find((c) => c.contrada_id === contrada.id);
+              {participants.map((participant) => {
+                const assigned = carte.find((c) => c.participant_id === participant.id);
                 return (
-                  <div className="flex flex-wrap items-center gap-2 rounded border border-stone-800 px-3 py-1.5 text-sm" key={contrada.id}>
-                    <span className="w-40 shrink-0 font-semibold text-stone-200">{contrada.name}</span>
+                  <div className="flex flex-wrap items-center gap-2 rounded border border-stone-800 px-3 py-1.5 text-sm" key={participant.id}>
+                    <span className="w-40 shrink-0 font-semibold text-stone-200">{participant.name}</span>
                     <select
                       className="rounded-md border border-stone-700 bg-stone-800 px-2 py-1 text-sm text-stone-100"
                       disabled={savingCarte}
-                      onChange={(e) => handleAssignCarta(contrada.id, e.target.value as AuspiciCartaType | '')}
+                      onChange={(e) => handleAssignCarta(participant.id, e.target.value as AuspiciCartaType | '')}
                       value={assigned?.carta ?? ''}
                     >
                       <option value="">Nessuna carta</option>
@@ -603,7 +772,7 @@ function AuspiciGestioneContent() {
                         <input
                           checked={assigned.used}
                           disabled={savingCarte}
-                          onChange={(e) => handleToggleCartaUsed(contrada.id, e.target.checked)}
+                          onChange={(e) => handleToggleCartaUsed(participant.id, e.target.checked)}
                           type="checkbox"
                         />
                         Usata
@@ -612,6 +781,7 @@ function AuspiciGestioneContent() {
                   </div>
                 );
               })}
+              {participants.length === 0 && <p className="text-sm text-stone-500">Nessuna squadra ancora aggiunta</p>}
             </div>
           </section>
         </>
