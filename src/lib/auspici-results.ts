@@ -45,12 +45,12 @@ export const auspiciProvaDirection: Record<AuspiciProva, 'asc' | 'desc'> = {
 export const auspiciProvaRawScoreLabels: Record<AuspiciProva, string> = {
   mercante: 'Valore stimato da ciascuna squadra per le 5 prove: lo scarto dal valore di riferimento e la classifica si calcolano automaticamente (vince il totale più basso)',
   memoria: 'Sequenza di 20 lettere indicata da ciascuna squadra: le lettere in posizione corretta si contano automaticamente confrontando con la sequenza di riferimento (vince il punteggio più alto)',
-  investitura: 'Tempo torre, altezza castello di carte ed elementi trovati nell’horror vacui: piazzamento per ciascuna microabilità e somma calcolati automaticamente (vince il totale più basso)',
+  investitura: 'Tempo torre, altezza castello di carte ed elementi corretti/errati dell’horror vacui: piazzamento per ciascuna microabilità (par merito compreso) e somma calcolati automaticamente (vince il totale più basso)',
   tiro: 'Bersagli colpiti: il punteggio (1+2+3+4+5) è calcolato automaticamente (vince il più alto)',
   giuramento: 'Punti 0-5 di ciascun giudice sui 4 criteri: il totale, con eventuale penalità tempo, è calcolato automaticamente (vince il più alto)',
 };
 
-export type AuspiciProvaFieldKind = 'estimate' | 'hit' | 'metric' | 'score';
+export type AuspiciProvaFieldKind = 'count' | 'estimate' | 'hit' | 'metric' | 'score';
 
 export interface AuspiciProvaField {
   // Per i campi 'metric': direzione della classifica su quel singolo valore
@@ -76,6 +76,13 @@ export const AUSPICI_GIURAMENTO_PENALTY_KEY = 'penalty_tempo';
 // Chiave del campo sequenza di Memoria Sforzesca, sia nel dettaglio di ogni
 // squadra sia nel riferimento dell'edizione.
 export const AUSPICI_MEMORIA_SEQUENCE_KEY = 'sequence';
+
+// Chiavi dei campi dell'horror vacui (Investitura): punteggio netto =
+// corretti - errori (regolamento punto 9.3.3); l'ordine di consegna è
+// facoltativo e vale solo come ultimo criterio di parità.
+export const AUSPICI_HORROR_VACUI_CORRETTI_KEY = 'horror_vacui_corretti';
+export const AUSPICI_HORROR_VACUI_ERRORI_KEY = 'horror_vacui_errori';
+export const AUSPICI_HORROR_VACUI_ORDINE_KEY = 'horror_vacui_ordine';
 
 // Scomposizione nelle singole componenti di ogni prova:
 // - 'estimate' (Mercante): valore stimato da confrontare con un valore di
@@ -107,7 +114,9 @@ export const auspiciProvaFields: Partial<Record<AuspiciProva, AuspiciProvaField[
   investitura: [
     { direction: 'asc', key: 'torre', kind: 'metric', label: 'Tempo montaggio torre', unit: 's' },
     { direction: 'desc', key: 'castello', kind: 'metric', label: 'Altezza castello di carte', unit: 'cm' },
-    { direction: 'desc', key: 'horror_vacui', kind: 'metric', label: 'Elementi trovati (horror vacui)', unit: '/20' },
+    { key: AUSPICI_HORROR_VACUI_CORRETTI_KEY, kind: 'count', label: 'Horror vacui · elementi corretti' },
+    { key: AUSPICI_HORROR_VACUI_ERRORI_KEY, kind: 'count', label: 'Horror vacui · elementi errati' },
+    { key: AUSPICI_HORROR_VACUI_ORDINE_KEY, kind: 'count', label: 'Horror vacui · ordine di consegna (facoltativo)' },
   ],
   mercante: [
     { key: 'gonfalone', kind: 'estimate', label: 'Peso gonfalone', unit: 'g' },
@@ -164,6 +173,47 @@ const rankAuspiciValues = (
   });
 
   return ranks;
+};
+
+// Classifica generica basata su un comparatore invece che su un singolo
+// valore numerico: serve per l'horror vacui, dove il piazzamento dipende da
+// più criteri in cascata (punteggio netto, poi meno errori, poi ordine di
+// consegna). compare(a, b) < 0 significa "a è meglio di b"; 0 significa pari
+// merito su tutti i criteri disponibili.
+const rankByComparator = <T,>(
+  items: { participant_id: string; value: T | null }[],
+  compare: (a: T, b: T) => number
+): Map<string, number | null> => {
+  const withValue = items.filter(
+    (item): item is { participant_id: string; value: T } => item.value !== null
+  );
+  const ranks = new Map<string, number | null>();
+
+  items.forEach((item) => {
+    if (item.value === null) ranks.set(item.participant_id, null);
+  });
+  withValue.forEach((item) => {
+    const betterCount = withValue.filter((other) => compare(other.value, item.value) < 0).length;
+    ranks.set(item.participant_id, betterCount + 1);
+  });
+
+  return ranks;
+};
+
+interface AuspiciHorrorVacuiEntry {
+  errori: number;
+  net: number;
+  ordine: number | null;
+}
+
+// Piazzamento dell'horror vacui (regolamento punto 9.3.3): punteggio netto
+// (corretti - errori) più alto vince; a parità, meno errori; persistendo la
+// parità, chi ha consegnato per prima (se l'ordine è stato inserito).
+const compareAuspiciHorrorVacui = (a: AuspiciHorrorVacuiEntry, b: AuspiciHorrorVacuiEntry): number => {
+  if (a.net !== b.net) return a.net > b.net ? -1 : 1;
+  if (a.errori !== b.errori) return a.errori < b.errori ? -1 : 1;
+  if (a.ordine !== null && b.ordine !== null && a.ordine !== b.ordine) return a.ordine < b.ordine ? -1 : 1;
+  return 0;
 };
 
 // Normalizza una sequenza inserita a mano (lettere/codici separati da
@@ -232,7 +282,7 @@ export function calculateAuspiciRows(
   const direction = auspiciProvaDirection[prova];
   const totalParticipants = rows.length;
   const fields = auspiciProvaFields[prova];
-  const hasComponentRanking = Boolean(fields?.some((field) => field.kind === 'estimate' || field.kind === 'metric'));
+  const hasComponentRanking = Boolean(fields?.some((field) => field.kind === 'estimate'));
 
   let finalValues: { participant_id: string; value: number | null }[];
 
@@ -242,21 +292,57 @@ export function calculateAuspiciRows(
       participant_id: row.participant_id,
       value: computeAuspiciMemoriaScore(row.detail[AUSPICI_MEMORIA_SEQUENCE_KEY] ?? '', referenceSequence),
     }));
+  } else if (prova === 'investitura') {
+    // Ogni microabilità (torre, castello, horror vacui) ha la propria
+    // classifica indipendente; il piazzamento finale è la somma dei tre
+    // piazzamenti (regolamento punto 9.3.5).
+    const torreDirection = fields?.find((field) => field.key === 'torre')?.direction ?? 'asc';
+    const castelloDirection = fields?.find((field) => field.key === 'castello')?.direction ?? 'desc';
+    const torreRanks = rankAuspiciValues(
+      rows.map((row) => ({ participant_id: row.participant_id, value: parsePalioNumber(row.detail.torre ?? '') })),
+      torreDirection
+    );
+    const castelloRanks = rankAuspiciValues(
+      rows.map((row) => ({ participant_id: row.participant_id, value: parsePalioNumber(row.detail.castello ?? '') })),
+      castelloDirection
+    );
+    const horrorVacuiEntries = rows.map((row) => {
+      const corretti = parsePalioInteger(row.detail[AUSPICI_HORROR_VACUI_CORRETTI_KEY] ?? '');
+      const errori = parsePalioInteger(row.detail[AUSPICI_HORROR_VACUI_ERRORI_KEY] ?? '');
+      if (corretti === null && errori === null) {
+        return { participant_id: row.participant_id, value: null };
+      }
+      return {
+        participant_id: row.participant_id,
+        value: {
+          errori: errori ?? 0,
+          net: (corretti ?? 0) - (errori ?? 0),
+          ordine: parsePalioInteger(row.detail[AUSPICI_HORROR_VACUI_ORDINE_KEY] ?? ''),
+        },
+      };
+    });
+    const horrorVacuiRanks = rankByComparator(horrorVacuiEntries, compareAuspiciHorrorVacui);
+
+    finalValues = rows.map((row) => {
+      const torre = torreRanks.get(row.participant_id);
+      const castello = castelloRanks.get(row.participant_id);
+      const horrorVacui = horrorVacuiRanks.get(row.participant_id);
+      if (torre == null || castello == null || horrorVacui == null) {
+        return { participant_id: row.participant_id, value: null };
+      }
+      return { participant_id: row.participant_id, value: torre + castello + horrorVacui };
+    });
   } else if (hasComponentRanking && fields) {
-    // Ogni componente (stima o microabilità) ha la propria classifica; il
-    // piazzamento finale è la somma dei piazzamenti di componente.
+    // Ogni componente (stima) ha la propria classifica; il piazzamento
+    // finale è la somma dei piazzamenti di componente.
     const ranksByField = fields.map((field) => {
       const values = rows.map((row) => {
         const raw = parsePalioNumber(row.detail[field.key] ?? '');
-        if (field.kind === 'estimate') {
-          const referenceValue = parsePalioNumber(reference[field.key] ?? '');
-          const scarto = raw !== null && referenceValue !== null ? Math.abs(raw - referenceValue) : null;
-          return { participant_id: row.participant_id, value: scarto };
-        }
-        return { participant_id: row.participant_id, value: raw };
+        const referenceValue = parsePalioNumber(reference[field.key] ?? '');
+        const scarto = raw !== null && referenceValue !== null ? Math.abs(raw - referenceValue) : null;
+        return { participant_id: row.participant_id, value: scarto };
       });
-      const fieldDirection = field.kind === 'estimate' ? 'asc' : (field.direction ?? 'asc');
-      return rankAuspiciValues(values, fieldDirection);
+      return rankAuspiciValues(values, 'asc');
     });
 
     finalValues = rows.map((row) => {

@@ -812,9 +812,9 @@ export function AuspiciGestioneContent() {
                                         className="w-20 rounded border border-stone-700 bg-stone-800 px-2 py-1 text-stone-100"
                                         disabled={row.is_position_overridden}
                                         max={field.max}
-                                        min={field.kind === 'score' ? 0 : undefined}
+                                        min={field.kind === 'score' || field.kind === 'count' ? 0 : undefined}
                                         onChange={(e) => updateDetailField(row.participant_id, field.key, e.target.value)}
-                                        step={field.kind === 'score' ? 1 : 'any'}
+                                        step={field.kind === 'score' || field.kind === 'count' ? 1 : 'any'}
                                         type="number"
                                         value={row.detail[field.key] ?? ''}
                                       />
