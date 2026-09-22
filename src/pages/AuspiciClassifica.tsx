@@ -44,7 +44,8 @@ function useFitScale<Content extends HTMLElement, Container extends HTMLElement>
 
       const availableWidth = container.clientWidth;
       const availableHeight = container.clientHeight;
-      const nextScale = Math.min(availableWidth / contentWidth, availableHeight / contentHeight);
+      // Margine di sicurezza per evitare tagli dovuti ad arrotondamenti subpixel.
+      const nextScale = 0.98 * Math.min(availableWidth / contentWidth, availableHeight / contentHeight);
       setScale(Number.isFinite(nextScale) && nextScale > 0 ? nextScale : 1);
     }
 
@@ -133,20 +134,20 @@ export function AuspiciClassifica() {
             </div>
           ) : (
             <div
-              className="mx-auto w-fit origin-center"
+              className="mx-auto w-fit origin-top"
               ref={contentRef}
               style={{ transform: `scale(${scale})` }}
             >
               {currentPage.type === 'ranking' && (
-                <section className="w-[min(90vw,640px)] rounded-xl border border-amber-200/25 bg-black/20 p-3 sm:p-4">
+                <section className="w-[min(94vw,980px)] rounded-xl border border-amber-200/25 bg-black/20 p-3 sm:p-4">
                   <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-amber-200/60">
                     <Trophy aria-hidden="true" className="h-4 w-4" />
                     Classifica generale — Punti Auspicio
                   </div>
-                  <div className="space-y-1.5">
+                  <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
                     {ranking.map((item) => (
                       <div
-                        className="grid grid-cols-[32px_36px_minmax(0,1fr)_64px] items-center gap-2 rounded-lg bg-amber-50/10 px-3 py-2 sm:grid-cols-[40px_44px_minmax(0,1fr)_80px]"
+                        className="grid grid-cols-[28px_32px_minmax(0,1fr)_56px] items-center gap-1.5 rounded-lg bg-amber-50/10 px-2 py-1.5 sm:grid-cols-[36px_40px_minmax(0,1fr)_72px] sm:gap-2 sm:px-3 sm:py-2"
                         key={item.id}
                       >
                         <span className="text-lg font-black text-amber-300 sm:text-xl">{item.rank}°</span>
@@ -177,15 +178,15 @@ export function AuspiciClassifica() {
                   .sort((a, b) => (a.result!.position! - b.result!.position!));
 
                 return (
-                  <section className="w-[min(90vw,640px)] rounded-xl border border-amber-200/20 bg-black/20 p-3 sm:p-4">
+                  <section className="w-[min(94vw,980px)] rounded-xl border border-amber-200/20 bg-black/20 p-3 sm:p-4">
                     <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-amber-200/60">
                       <Trophy aria-hidden="true" className="h-4 w-4" />
                       {auspiciProvaLabels[prova]}
                     </h3>
-                    <div className="space-y-1.5">
+                    <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
                       {provaRanking.map(({ item, result }) => (
                         <div
-                          className="grid grid-cols-[32px_36px_minmax(0,1fr)_64px] items-center gap-2 rounded-lg bg-amber-50/10 px-3 py-2 sm:grid-cols-[40px_44px_minmax(0,1fr)_80px]"
+                          className="grid grid-cols-[28px_32px_minmax(0,1fr)_56px] items-center gap-1.5 rounded-lg bg-amber-50/10 px-2 py-1.5 sm:grid-cols-[36px_40px_minmax(0,1fr)_72px] sm:gap-2 sm:px-3 sm:py-2"
                           key={item.id}
                         >
                           <span className="text-lg font-black text-amber-300 sm:text-xl">{result!.position}°</span>
