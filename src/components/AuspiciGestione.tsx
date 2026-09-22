@@ -12,8 +12,10 @@ import type {
   AuspiciProva,
 } from '../hooks/useAuspiciData';
 import {
+  AUSPICI_GIURAMENTO_PENALTY_KEY,
   type AuspiciResultInput,
   auspiciCartaLabels,
+  auspiciProvaFields,
   auspiciProvaLabels,
   auspiciProvaOrder,
   auspiciProvaRawScoreLabels,
@@ -36,6 +38,7 @@ import { parsePalioNumber } from '../lib/palio-results';
 // si aggiungono digitando il nome.
 
 const emptyResultRow = (participantId: string): AuspiciResultInput => ({
+  detail: {},
   is_position_overridden: false,
   notes: '',
   participant_id: participantId,
@@ -169,7 +172,7 @@ export function AuspiciGestioneContent() {
 
       const { data, error } = await supabase
         .from('auspici_results')
-        .select('participant_id, raw_score, position, is_position_overridden, notes')
+        .select('participant_id, raw_score, position, is_position_overridden, notes, detail')
         .eq('edition_id', selectedEditionId)
         .eq('prova', prova);
 
@@ -183,7 +186,15 @@ export function AuspiciGestioneContent() {
       setResults(empty.map((row) => {
         const existing = existingByParticipant.get(row.participant_id);
         if (!existing) return row;
+        const existingDetail = (existing.detail ?? {}) as Record<string, unknown>;
+        const detail: Record<string, string> = {};
+        Object.entries(existingDetail).forEach(([key, value]) => {
+          detail[key] = typeof value === 'boolean'
+            ? (value ? 'true' : '')
+            : value === null || value === undefined ? '' : String(value);
+        });
         return {
+          detail,
           is_position_overridden: Boolean(existing.is_position_overridden),
           notes: existing.notes ?? '',
           participant_id: row.participant_id,
@@ -195,6 +206,7 @@ export function AuspiciGestioneContent() {
     fetchResultsForProva();
   }, [participants, prova, selectedEditionId, supabase]);
 
+  const provaFields = auspiciProvaFields[prova];
   const calculatedRows = useMemo(() => calculateAuspiciRows(results, prova), [prova, results]);
   const displayRows = useMemo(
     () => [...calculatedRows].sort((a, b) => {
@@ -208,6 +220,14 @@ export function AuspiciGestioneContent() {
 
   function updateField(participantId: string, field: keyof AuspiciResultInput, value: string | boolean) {
     setResults((prev) => prev.map((row) => (row.participant_id === participantId ? { ...row, [field]: value } : row)));
+  }
+
+  function updateDetailField(participantId: string, fieldKey: string, value: string) {
+    setResults((prev) => prev.map((row) => (
+      row.participant_id === participantId
+        ? { ...row, detail: { ...row.detail, [fieldKey]: value } }
+        : row
+    )));
   }
 
   async function handleCreateEdition(e: FormEvent) {
@@ -342,15 +362,36 @@ export function AuspiciGestioneContent() {
 
     setSaving(true);
     try {
-      const payload = displayRows.map((row) => ({
-        edition_id: selectedEditionId,
-        is_position_overridden: row.is_position_overridden,
-        notes: row.notes || null,
-        participant_id: row.participant_id,
-        position: row.position ? Number.parseInt(row.position, 10) : null,
-        prova,
-        raw_score: parsePalioNumber(row.raw_score),
-      }));
+      const payload = displayRows.map((row) => {
+        let detailJson: Record<string, boolean | number> | null = null;
+        if (provaFields) {
+          detailJson = {};
+          provaFields.forEach((field) => {
+            const raw = row.detail[field.key] ?? '';
+            if (field.kind === 'hit') {
+              detailJson![field.key] = raw === 'true';
+              return;
+            }
+            if (raw.trim() === '') return;
+            const parsed = Number.parseInt(raw, 10);
+            if (!Number.isNaN(parsed)) detailJson![field.key] = parsed;
+          });
+          if (prova === 'giuramento' && row.detail[AUSPICI_GIURAMENTO_PENALTY_KEY] === 'true') {
+            detailJson[AUSPICI_GIURAMENTO_PENALTY_KEY] = true;
+          }
+        }
+
+        return {
+          detail: detailJson,
+          edition_id: selectedEditionId,
+          is_position_overridden: row.is_position_overridden,
+          notes: row.notes || null,
+          participant_id: row.participant_id,
+          position: row.position ? Number.parseInt(row.position, 10) : null,
+          prova,
+          raw_score: parsePalioNumber(row.raw_score),
+        };
+      });
 
       const { error } = await supabase.from('auspici_results').upsert(payload, { onConflict: 'edition_id,prova,participant_id' });
       if (error) {
@@ -604,11 +645,21 @@ export function AuspiciGestioneContent() {
             ) : (
               <form className="mt-4 space-y-2" onSubmit={handleSaveResults}>
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[640px] text-sm">
+                  <table className={`w-full text-sm ${provaFields ? 'min-w-[960px]' : 'min-w-[640px]'}`}>
                     <thead>
                       <tr className="border-b border-stone-800 text-left text-xs uppercase tracking-wide text-stone-400">
                         <th className="py-2 pr-3">Squadra</th>
-                        <th className="py-2 pr-3">Valore grezzo</th>
+                        {provaFields ? (
+                          <>
+                            {provaFields.map((field) => (
+                              <th className="py-2 pr-3" key={field.key}>{field.label}</th>
+                            ))}
+                            {prova === 'giuramento' && <th className="py-2 pr-3">Penalità tempo (-3)</th>}
+                            <th className="py-2 pr-3">Totale</th>
+                          </>
+                        ) : (
+                          <th className="py-2 pr-3">Valore grezzo</th>
+                        )}
                         <th className="py-2 pr-3">Posizione</th>
                         <th className="py-2 pr-3">Punti</th>
                         <th className="py-2 pr-3">Override manuale</th>
@@ -622,14 +673,52 @@ export function AuspiciGestioneContent() {
                         return (
                           <tr className="border-b border-stone-800/60" key={row.participant_id}>
                             <td className="py-1.5 pr-3 font-semibold text-stone-200">{name}</td>
-                            <td className="py-1.5 pr-3">
-                              <input
-                                className="w-24 rounded border border-stone-700 bg-stone-800 px-2 py-1 text-stone-100"
-                                disabled={row.is_position_overridden}
-                                onChange={(e) => updateField(row.participant_id, 'raw_score', e.target.value)}
-                                value={row.raw_score}
-                              />
-                            </td>
+                            {provaFields ? (
+                              <>
+                                {provaFields.map((field) => (
+                                  <td className="py-1.5 pr-3" key={field.key}>
+                                    {field.kind === 'hit' ? (
+                                      <input
+                                        checked={row.detail[field.key] === 'true'}
+                                        disabled={row.is_position_overridden}
+                                        onChange={(e) => updateDetailField(row.participant_id, field.key, e.target.checked ? 'true' : '')}
+                                        type="checkbox"
+                                      />
+                                    ) : (
+                                      <input
+                                        className="w-16 rounded border border-stone-700 bg-stone-800 px-2 py-1 text-stone-100"
+                                        disabled={row.is_position_overridden}
+                                        max={field.max}
+                                        min={field.kind === 'score' ? 0 : 1}
+                                        onChange={(e) => updateDetailField(row.participant_id, field.key, e.target.value)}
+                                        type="number"
+                                        value={row.detail[field.key] ?? ''}
+                                      />
+                                    )}
+                                  </td>
+                                ))}
+                                {prova === 'giuramento' && (
+                                  <td className="py-1.5 pr-3">
+                                    <input
+                                      checked={row.detail[AUSPICI_GIURAMENTO_PENALTY_KEY] === 'true'}
+                                      disabled={row.is_position_overridden}
+                                      onChange={(e) => updateDetailField(row.participant_id, AUSPICI_GIURAMENTO_PENALTY_KEY, e.target.checked ? 'true' : '')}
+                                      type="checkbox"
+                                    />
+                                  </td>
+                                )}
+                                <td className="py-1.5 pr-3 font-semibold text-stone-300">{row.raw_score || '-'}</td>
+                              </>
+                            ) : (
+                              <td className="py-1.5 pr-3">
+                                <input
+                                  className="w-24 rounded border border-stone-700 bg-stone-800 px-2 py-1 text-stone-100"
+                                  disabled={row.is_position_overridden}
+                                  onChange={(e) => updateField(row.participant_id, 'raw_score', e.target.value)}
+                                  value={row.raw_score}
+                                />
+                              </td>
+                            )}
                             <td className="py-1.5 pr-3">
                               <input
                                 className={`w-16 rounded border px-2 py-1 text-stone-100 ${status === 'invalid' ? 'border-red-500 bg-red-950/40' : 'border-stone-700 bg-stone-800'}`}

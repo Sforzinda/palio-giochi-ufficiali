@@ -52,6 +52,12 @@ create table if not exists public.auspici_results (
   prova public.auspici_prova not null,
   participant_id uuid not null references public.auspici_participants(id) on delete cascade,
   raw_score numeric,               -- metrica grezza della prova (scarto/lettere/punti/ecc.)
+  -- Valori grezzi delle singole componenti della prova (piazzamento di ogni
+  -- stima/microabilità, bersaglio colpito, punteggio di ogni giudice),
+  -- quando la prova ha una scomposizione (vedi auspiciProvaFields in
+  -- src/lib/auspici-results.ts): raw_score è la loro somma, calcolata in
+  -- app. Null per prove senza scomposizione (es. Memoria Sforzesca).
+  detail jsonb,
   position integer check (position >= 1),
   is_position_overridden boolean not null default false,
   notes text,
