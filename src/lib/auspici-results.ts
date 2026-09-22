@@ -1,15 +1,12 @@
 import { parsePalioInteger, parsePalioNumber } from './palio-results';
 import type { AuspiciProva } from '../hooks/useAuspiciData';
 
-// Funzioni pure di calcolo/validazione per la Serata degli Auspici. A
-// differenza dei Giochi del Palio, ogni prova produce una sola metrica
-// grezza (raw_score) già riassuntiva — somma piazzamenti, lettere corrette,
-// punti bersaglio, punti giudici — calcolata dai giudici secondo il
-// Regolamento Cena degli Auspici; qui si applica solo il piazzamento
-// (par merito compreso) e la scala di punti N, N-1, ..., 1 già usata nei
-// Giochi del Palio [regolamento punto 4], generalizzata al numero effettivo
-// di partecipanti (che può superare le 12 Contrade ufficiali per via delle
-// squadre extra valide solo per questo evento).
+// Funzioni pure di calcolo/validazione per la Serata degli Auspici. Invece
+// di far sommare a mano i piazzamenti/punteggi ai responsabili, si inseriscono
+// i valori grezzi di ciascuna componente e l'app calcola piazzamento e
+// punteggio (par merito compreso, scala N, N-1, ..., 1 del regolamento punto
+// 4, generalizzata al numero effettivo di partecipanti — può superare le 12
+// Contrade ufficiali per via delle squadre extra valide solo per l'evento).
 
 export interface AuspiciResultInput {
   detail: Record<string, string>;
@@ -34,8 +31,9 @@ export const auspiciProvaLabels: Record<AuspiciProva, string> = {
 
 export const auspiciProvaOrder: AuspiciProva[] = ['mercante', 'memoria', 'investitura', 'tiro', 'giuramento'];
 
-// Direzione della metrica grezza: 'asc' = vince il valore più basso (somma
-// piazzamenti/scarti), 'desc' = vince il valore più alto (punti).
+// Direzione della metrica finale usata per il piazzamento: 'asc' = vince il
+// valore più basso (somma piazzamenti/scarti), 'desc' = vince il valore più
+// alto (punti/lettere corrette).
 export const auspiciProvaDirection: Record<AuspiciProva, 'asc' | 'desc'> = {
   mercante: 'asc',
   memoria: 'desc',
@@ -45,20 +43,28 @@ export const auspiciProvaDirection: Record<AuspiciProva, 'asc' | 'desc'> = {
 };
 
 export const auspiciProvaRawScoreLabels: Record<AuspiciProva, string> = {
-  mercante: 'Piazzamento (1°...N°) di ciascuna delle 5 stime: la somma è calcolata automaticamente (vince il più basso)',
-  memoria: 'Lettere corrette su 20 (vince il più alto)',
-  investitura: 'Piazzamento (1°...N°) di ciascuna delle 3 microabilità: la somma è calcolata automaticamente (vince il più basso)',
+  mercante: 'Valore stimato da ciascuna squadra per le 5 prove: lo scarto dal valore di riferimento e la classifica si calcolano automaticamente (vince il totale più basso)',
+  memoria: 'Sequenza di 20 lettere indicata da ciascuna squadra: le lettere in posizione corretta si contano automaticamente confrontando con la sequenza di riferimento (vince il punteggio più alto)',
+  investitura: 'Tempo torre, altezza castello di carte ed elementi trovati nell’horror vacui: piazzamento per ciascuna microabilità e somma calcolati automaticamente (vince il totale più basso)',
   tiro: 'Bersagli colpiti: il punteggio (1+2+3+4+5) è calcolato automaticamente (vince il più alto)',
   giuramento: 'Punti 0-5 di ciascun giudice sui 4 criteri: il totale, con eventuale penalità tempo, è calcolato automaticamente (vince il più alto)',
 };
 
-export type AuspiciProvaFieldKind = 'hit' | 'placement' | 'score';
+export type AuspiciProvaFieldKind = 'estimate' | 'hit' | 'metric' | 'score';
 
 export interface AuspiciProvaField {
+  // Per i campi 'metric': direzione della classifica su quel singolo valore
+  // grezzo ('asc' = vince il più basso, es. un tempo; 'desc' = vince il più
+  // alto, es. un'altezza o un conteggio). Non si applica agli altri kind:
+  // 'estimate' vince sempre lo scarto più basso dal riferimento, 'hit'/
+  // 'score' si sommano direttamente (vedi auspiciProvaDirection a livello di
+  // prova).
+  direction?: 'asc' | 'desc';
   key: string;
   kind: AuspiciProvaFieldKind;
   label: string;
   max?: number;
+  unit?: string;
   value?: number;
 }
 
@@ -67,12 +73,22 @@ export interface AuspiciProvaField {
 // punto 9.5.6). Non è un campo sommato come gli altri: si sottrae alla fine.
 export const AUSPICI_GIURAMENTO_PENALTY_KEY = 'penalty_tempo';
 
-// Scomposizione nelle singole componenti di ogni prova, così i responsabili
-// inseriscono i valori grezzi (piazzamento di ogni stima/microabilità,
-// bersaglio colpito, punteggio di ogni giudice) e l'app calcola la somma da
-// sola, invece di doverla sommare a mano prima di inserirla. Memoria
-// Sforzesca non ha sotto-componenti: resta un unico valore grezzo (lettere
-// corrette).
+// Chiave del campo sequenza di Memoria Sforzesca, sia nel dettaglio di ogni
+// squadra sia nel riferimento dell'edizione.
+export const AUSPICI_MEMORIA_SEQUENCE_KEY = 'sequence';
+
+// Scomposizione nelle singole componenti di ogni prova:
+// - 'estimate' (Mercante): valore stimato da confrontare con un valore di
+//   riferimento comune all'edizione (auspici_prova_references); vince lo
+//   scarto assoluto più basso.
+// - 'metric' (Investitura): valore grezzo misurato (tempo, altezza,
+//   conteggio), classificato direttamente con la propria direzione.
+// - 'hit' (Tiro dell'Auspicio): bersaglio colpito o no, vale i punti del
+//   bersaglio se colpito.
+// - 'score' (Giuramento): punteggio 0-5 assegnato da un giudice su un
+//   criterio.
+// Memoria Sforzesca non ha una scomposizione per campo: è gestita a parte
+// tramite la sequenza di riferimento e quella di ogni squadra.
 export const auspiciProvaFields: Partial<Record<AuspiciProva, AuspiciProvaField[]>> = {
   giuramento: [
     { key: 'g1_vincoli', kind: 'score', label: 'Giudice 1 · vincoli', max: 5 },
@@ -89,16 +105,16 @@ export const auspiciProvaFields: Partial<Record<AuspiciProva, AuspiciProvaField[
     { key: 'g3_spirito', kind: 'score', label: 'Giudice 3 · spirito', max: 5 },
   ],
   investitura: [
-    { key: 'torre', kind: 'placement', label: 'Montaggio della torre' },
-    { key: 'castello', kind: 'placement', label: 'Castello di carte' },
-    { key: 'horror_vacui', kind: 'placement', label: 'Ricerca horror vacui' },
+    { direction: 'asc', key: 'torre', kind: 'metric', label: 'Tempo montaggio torre', unit: 's' },
+    { direction: 'desc', key: 'castello', kind: 'metric', label: 'Altezza castello di carte', unit: 'cm' },
+    { direction: 'desc', key: 'horror_vacui', kind: 'metric', label: 'Elementi trovati (horror vacui)', unit: '/20' },
   ],
   mercante: [
-    { key: 'gonfalone', kind: 'placement', label: 'Peso del gonfalone' },
-    { key: 'mais', kind: 'placement', label: 'Chicchi di mais' },
-    { key: 'libro', kind: 'placement', label: 'Pagine del libro' },
-    { key: 'statuetta', kind: 'placement', label: 'Altezza statuetta' },
-    { key: 'stivale', kind: 'placement', label: 'Misura stivale' },
+    { key: 'gonfalone', kind: 'estimate', label: 'Peso gonfalone', unit: 'g' },
+    { key: 'mais', kind: 'estimate', label: 'Chicchi di mais', unit: 'pz' },
+    { key: 'libro', kind: 'estimate', label: 'Pagine libro', unit: 'pag' },
+    { key: 'statuetta', kind: 'estimate', label: 'Altezza statuetta', unit: 'cm' },
+    { key: 'stivale', kind: 'estimate', label: 'Misura stivale', unit: 'EU' },
   ],
   tiro: [
     { key: 'cesta', kind: 'hit', label: 'Cesta del Borgo', value: 1 },
@@ -108,6 +124,11 @@ export const auspiciProvaFields: Partial<Record<AuspiciProva, AuspiciProvaField[
     { key: 'pozzo', kind: 'hit', label: 'Pozzo del Castello', value: 5 },
   ],
 };
+
+// Mercante (valore di riferimento) e Memoria (sequenza di riferimento)
+// hanno bisogno di un dato condiviso a livello di edizione+prova, salvato
+// in auspici_prova_references — non per singola squadra.
+export const auspiciProvasWithReference: AuspiciProva[] = ['mercante', 'memoria'];
 
 export const auspiciCartaLabels: Record<'duca' | 'duchessa' | 'armato' | 'fornaio' | 'mastro_falconiere', string> = {
   duca: 'Duca – Vederci chiaro',
@@ -145,11 +166,33 @@ const rankAuspiciValues = (
   return ranks;
 };
 
-// Somma i valori grezzi delle singole componenti di una prova (piazzamenti,
-// bersagli colpiti, punti dei giudici) nell'unica metrica usata per il
-// piazzamento. Per Memoria Sforzesca (nessuna scomposizione) torna null: si
-// usa direttamente il raw_score inserito a mano.
-export function computeAuspiciRawScoreFromDetail(prova: AuspiciProva, detail: Record<string, string>): number | null {
+// Normalizza una sequenza inserita a mano (lettere/codici separati da
+// virgole o spazi) in un array di codici confrontabili.
+export const parseAuspiciSequence = (raw: string): string[] =>
+  raw
+    .split(/[,\s]+/)
+    .map((item) => item.trim().toUpperCase())
+    .filter((item) => item.length > 0);
+
+// Punteggio di Memoria Sforzesca: un punto per ogni lettera nella posizione
+// esatta rispetto alla sequenza di riferimento (regolamento punto 9.2.4).
+export function computeAuspiciMemoriaScore(participantSequenceRaw: string, referenceSequenceRaw: string): number | null {
+  const participant = parseAuspiciSequence(participantSequenceRaw);
+  const reference = parseAuspiciSequence(referenceSequenceRaw);
+  if (participant.length === 0 || reference.length === 0) return null;
+
+  let correct = 0;
+  reference.forEach((code, index) => {
+    if (participant[index] === code) correct += 1;
+  });
+  return correct;
+}
+
+// Somma i valori grezzi delle componenti a somma diretta di una prova
+// (bersagli colpiti, punti dei giudici) nell'unica metrica usata per il
+// piazzamento. Non si applica a Mercante/Investitura (piazzamento per
+// componente, vedi calculateAuspiciRows) né a Memoria (sequenza).
+function computeAuspiciSummedRawScore(prova: AuspiciProva, detail: Record<string, string>): number | null {
   const fields = auspiciProvaFields[prova];
   if (!fields) return null;
 
@@ -181,16 +224,68 @@ export function computeAuspiciRawScoreFromDetail(prova: AuspiciProva, detail: Re
   return sum;
 }
 
-export function calculateAuspiciRows(rows: AuspiciResultInput[], prova: AuspiciProva): AuspiciCalculatedResultRow[] {
+export function calculateAuspiciRows(
+  rows: AuspiciResultInput[],
+  prova: AuspiciProva,
+  reference: Record<string, string> = {}
+): AuspiciCalculatedResultRow[] {
   const direction = auspiciProvaDirection[prova];
   const totalParticipants = rows.length;
-  const hasFields = Boolean(auspiciProvaFields[prova]);
-  const values = rows.map((row) => ({
-    participant_id: row.participant_id,
-    value: hasFields ? computeAuspiciRawScoreFromDetail(prova, row.detail) : parsePalioNumber(row.raw_score),
-  }));
-  const valueByParticipantId = new Map(values.map((item) => [item.participant_id, item.value]));
-  const ranks = rankAuspiciValues(values, direction);
+  const fields = auspiciProvaFields[prova];
+  const hasComponentRanking = Boolean(fields?.some((field) => field.kind === 'estimate' || field.kind === 'metric'));
+
+  let finalValues: { participant_id: string; value: number | null }[];
+
+  if (prova === 'memoria') {
+    const referenceSequence = reference[AUSPICI_MEMORIA_SEQUENCE_KEY] ?? '';
+    finalValues = rows.map((row) => ({
+      participant_id: row.participant_id,
+      value: computeAuspiciMemoriaScore(row.detail[AUSPICI_MEMORIA_SEQUENCE_KEY] ?? '', referenceSequence),
+    }));
+  } else if (hasComponentRanking && fields) {
+    // Ogni componente (stima o microabilità) ha la propria classifica; il
+    // piazzamento finale è la somma dei piazzamenti di componente.
+    const ranksByField = fields.map((field) => {
+      const values = rows.map((row) => {
+        const raw = parsePalioNumber(row.detail[field.key] ?? '');
+        if (field.kind === 'estimate') {
+          const referenceValue = parsePalioNumber(reference[field.key] ?? '');
+          const scarto = raw !== null && referenceValue !== null ? Math.abs(raw - referenceValue) : null;
+          return { participant_id: row.participant_id, value: scarto };
+        }
+        return { participant_id: row.participant_id, value: raw };
+      });
+      const fieldDirection = field.kind === 'estimate' ? 'asc' : (field.direction ?? 'asc');
+      return rankAuspiciValues(values, fieldDirection);
+    });
+
+    finalValues = rows.map((row) => {
+      let sum = 0;
+      let hasAny = false;
+      ranksByField.forEach((ranks) => {
+        const rank = ranks.get(row.participant_id);
+        if (rank !== null && rank !== undefined) {
+          sum += rank;
+          hasAny = true;
+        }
+      });
+      return { participant_id: row.participant_id, value: hasAny ? sum : null };
+    });
+  } else if (fields) {
+    finalValues = rows.map((row) => ({
+      participant_id: row.participant_id,
+      value: computeAuspiciSummedRawScore(prova, row.detail),
+    }));
+  } else {
+    finalValues = rows.map((row) => ({
+      participant_id: row.participant_id,
+      value: parsePalioNumber(row.raw_score),
+    }));
+  }
+
+  const isDerived = Boolean(fields) || prova === 'memoria';
+  const valueByParticipantId = new Map(finalValues.map((item) => [item.participant_id, item.value]));
+  const ranks = rankAuspiciValues(finalValues, direction);
 
   return rows.map((row) => {
     const calculatedPosition = ranks.get(row.participant_id) ?? null;
@@ -203,7 +298,7 @@ export function calculateAuspiciRows(rows: AuspiciResultInput[], prova: AuspiciP
       ...row,
       points: getAuspiciPoints(position, totalParticipants),
       position: position === null ? '' : String(position),
-      raw_score: hasFields ? (effectiveRawScore === null ? '' : String(effectiveRawScore)) : row.raw_score,
+      raw_score: isDerived ? (effectiveRawScore === null ? '' : String(effectiveRawScore)) : row.raw_score,
     };
   });
 }

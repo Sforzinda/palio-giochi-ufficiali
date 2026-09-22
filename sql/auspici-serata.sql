@@ -64,6 +64,18 @@ create table if not exists public.auspici_results (
   unique (edition_id, prova, participant_id)
 );
 
+-- Valore/sequenza di riferimento condiviso da tutta l'edizione per le prove
+-- che ne hanno bisogno (Mercante: 5 valori esatti; Memoria Sforzesca:
+-- sequenza corretta delle 20 lettere), confrontato con il dettaglio inserito
+-- per ogni squadra in auspici_results.detail. Una sola riga per edizione+prova.
+create table if not exists public.auspici_prova_references (
+  id uuid primary key default gen_random_uuid(),
+  edition_id uuid not null references public.auspici_editions(id) on delete cascade,
+  prova public.auspici_prova not null,
+  reference jsonb not null default '{}'::jsonb,
+  unique (edition_id, prova)
+);
+
 -- Punti Auspicio, Carta «Fornaio – Ritorno in vita» (+3) e penalità di condotta
 -- (fino a -3), sempre riferiti al singolo partecipante nell'edizione.
 create table if not exists public.auspici_adjustments (
@@ -95,6 +107,7 @@ create table if not exists public.auspici_carte (
 alter table public.auspici_editions enable row level security;
 alter table public.auspici_participants enable row level security;
 alter table public.auspici_results enable row level security;
+alter table public.auspici_prova_references enable row level security;
 alter table public.auspici_adjustments enable row level security;
 alter table public.auspici_carte enable row level security;
 
@@ -108,6 +121,8 @@ create policy "auspici_participants_public_read" on public.auspici_participants
   for select using (true);
 create policy "auspici_results_public_read" on public.auspici_results
   for select using (true);
+create policy "auspici_prova_references_public_read" on public.auspici_prova_references
+  for select using (true);
 create policy "auspici_adjustments_public_read" on public.auspici_adjustments
   for select using (true);
 create policy "auspici_carte_public_read" on public.auspici_carte
@@ -120,6 +135,8 @@ create policy "auspici_editions_manage_write" on public.auspici_editions
 create policy "auspici_participants_manage_write" on public.auspici_participants
   for all using (public.can_manage_palio_games()) with check (public.can_manage_palio_games());
 create policy "auspici_results_manage_write" on public.auspici_results
+  for all using (public.can_manage_palio_games()) with check (public.can_manage_palio_games());
+create policy "auspici_prova_references_manage_write" on public.auspici_prova_references
   for all using (public.can_manage_palio_games()) with check (public.can_manage_palio_games());
 create policy "auspici_adjustments_manage_write" on public.auspici_adjustments
   for all using (public.can_manage_palio_games()) with check (public.can_manage_palio_games());

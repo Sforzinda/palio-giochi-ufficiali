@@ -13,12 +13,14 @@ import type {
 } from '../hooks/useAuspiciData';
 import {
   AUSPICI_GIURAMENTO_PENALTY_KEY,
+  AUSPICI_MEMORIA_SEQUENCE_KEY,
   type AuspiciResultInput,
   auspiciCartaLabels,
   auspiciProvaFields,
   auspiciProvaLabels,
   auspiciProvaOrder,
   auspiciProvaRawScoreLabels,
+  auspiciProvasWithReference,
   calculateAuspiciRows,
   validateAuspiciRows,
 } from '../lib/auspici-results';
@@ -58,12 +60,14 @@ export function AuspiciGestioneContent() {
   const [newParticipantName, setNewParticipantName] = useState('');
   const [prova, setProva] = useState<AuspiciProva>('mercante');
   const [results, setResults] = useState<AuspiciResultInput[]>([]);
+  const [reference, setReference] = useState<Record<string, string>>({});
   const [adjustments, setAdjustments] = useState<AuspiciAdjustment[]>([]);
   const [carte, setCarte] = useState<AuspiciCarta[]>([]);
   const [newAdjustment, setNewAdjustment] = useState({ participantId: '', points: '', reason: '' });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingParticipants, setSavingParticipants] = useState(false);
+  const [savingReference, setSavingReference] = useState(false);
   const [savingCarte, setSavingCarte] = useState(false);
   const [savingAdjustment, setSavingAdjustment] = useState(false);
   const [togglingActive, setTogglingActive] = useState(false);
@@ -117,6 +121,30 @@ export function AuspiciGestioneContent() {
     setAdjustments((data as AuspiciAdjustment[]) ?? []);
   }, [supabase]);
 
+  const fetchReference = useCallback(async (editionId: string, forProva: AuspiciProva) => {
+    if (!editionId || !auspiciProvasWithReference.includes(forProva)) {
+      setReference({});
+      return;
+    }
+    const { data, error } = await supabase
+      .from('auspici_prova_references')
+      .select('reference')
+      .eq('edition_id', editionId)
+      .eq('prova', forProva)
+      .maybeSingle();
+    if (error) {
+      console.error('Error fetching auspici prova reference:', error);
+      setReference({});
+      return;
+    }
+    const raw = (data?.reference ?? {}) as Record<string, unknown>;
+    const inputs: Record<string, string> = {};
+    Object.entries(raw).forEach(([key, value]) => {
+      inputs[key] = value === null || value === undefined ? '' : String(value);
+    });
+    setReference(inputs);
+  }, [supabase]);
+
   const fetchCarte = useCallback(async (editionId: string) => {
     if (!editionId) {
       setCarte([]);
@@ -151,6 +179,10 @@ export function AuspiciGestioneContent() {
     fetchAdjustments(selectedEditionId);
     fetchCarte(selectedEditionId);
   }, [fetchAdjustments, fetchCarte, fetchParticipants, selectedEditionId]);
+
+  useEffect(() => {
+    fetchReference(selectedEditionId, prova);
+  }, [fetchReference, prova, selectedEditionId]);
 
   const selectedEdition = useMemo(
     () => editions.find((edition) => edition.id === selectedEditionId) ?? null,
@@ -207,7 +239,11 @@ export function AuspiciGestioneContent() {
   }, [participants, prova, selectedEditionId, supabase]);
 
   const provaFields = auspiciProvaFields[prova];
-  const calculatedRows = useMemo(() => calculateAuspiciRows(results, prova), [prova, results]);
+  const provaHasReference = auspiciProvasWithReference.includes(prova);
+  const calculatedRows = useMemo(
+    () => calculateAuspiciRows(results, prova, reference),
+    [prova, reference, results]
+  );
   const displayRows = useMemo(
     () => [...calculatedRows].sort((a, b) => {
       const nameA = participants.find((p) => p.id === a.participant_id)?.name ?? '';
@@ -228,6 +264,40 @@ export function AuspiciGestioneContent() {
         ? { ...row, detail: { ...row.detail, [fieldKey]: value } }
         : row
     )));
+  }
+
+  function updateReferenceField(fieldKey: string, value: string) {
+    setReference((prev) => ({ ...prev, [fieldKey]: value }));
+  }
+
+  async function handleSaveReference() {
+    if (!selectedEditionId) {
+      setStatusMessage("Seleziona prima un'edizione");
+      return;
+    }
+    setSavingReference(true);
+    try {
+      const referenceJson: Record<string, number | string> = {};
+      if (prova === 'mercante') {
+        (provaFields ?? []).forEach((field) => {
+          const parsed = parsePalioNumber(reference[field.key] ?? '');
+          if (parsed !== null) referenceJson[field.key] = parsed;
+        });
+      } else if (prova === 'memoria') {
+        referenceJson[AUSPICI_MEMORIA_SEQUENCE_KEY] = reference[AUSPICI_MEMORIA_SEQUENCE_KEY] ?? '';
+      }
+
+      const { error } = await supabase
+        .from('auspici_prova_references')
+        .upsert({ edition_id: selectedEditionId, prova, reference: referenceJson }, { onConflict: 'edition_id,prova' });
+      if (error) {
+        setStatusMessage(`Errore salvataggio riferimento: ${error.message}`);
+        return;
+      }
+      setStatusMessage(`Riferimento ${auspiciProvaLabels[prova]} salvato`);
+    } finally {
+      setSavingReference(false);
+    }
   }
 
   async function handleCreateEdition(e: FormEvent) {
@@ -363,7 +433,7 @@ export function AuspiciGestioneContent() {
     setSaving(true);
     try {
       const payload = displayRows.map((row) => {
-        let detailJson: Record<string, boolean | number> | null = null;
+        let detailJson: Record<string, boolean | number | string> | null = null;
         if (provaFields) {
           detailJson = {};
           provaFields.forEach((field) => {
@@ -373,12 +443,14 @@ export function AuspiciGestioneContent() {
               return;
             }
             if (raw.trim() === '') return;
-            const parsed = Number.parseInt(raw, 10);
+            const parsed = Number.parseFloat(raw);
             if (!Number.isNaN(parsed)) detailJson![field.key] = parsed;
           });
           if (prova === 'giuramento' && row.detail[AUSPICI_GIURAMENTO_PENALTY_KEY] === 'true') {
             detailJson[AUSPICI_GIURAMENTO_PENALTY_KEY] = true;
           }
+        } else if (prova === 'memoria') {
+          detailJson = { [AUSPICI_MEMORIA_SEQUENCE_KEY]: row.detail[AUSPICI_MEMORIA_SEQUENCE_KEY] ?? '' };
         }
 
         return {
@@ -640,6 +712,49 @@ export function AuspiciGestioneContent() {
               <p className="text-xs text-stone-400">{auspiciProvaRawScoreLabels[prova]}</p>
             </div>
 
+            {provaHasReference && (
+              <div className="mt-4 rounded-lg border border-amber-900/60 bg-amber-950/20 p-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-amber-300">
+                  Valore di riferimento {auspiciProvaLabels[prova]}
+                </h3>
+                {prova === 'mercante' ? (
+                  <div className="mt-2 flex flex-wrap gap-3">
+                    {(provaFields ?? []).map((field) => (
+                      <label className="text-sm font-semibold text-stone-300" key={field.key}>
+                        {field.label}
+                        <input
+                          className="ml-2 w-24 rounded-md border border-stone-700 bg-stone-800 px-2 py-1 text-sm text-stone-100"
+                          onChange={(e) => updateReferenceField(field.key, e.target.value)}
+                          type="number"
+                          value={reference[field.key] ?? ''}
+                        />
+                        {field.unit && <span className="ml-1 text-xs text-stone-500">{field.unit}</span>}
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <label className="mt-2 block text-sm font-semibold text-stone-300">
+                    Sequenza corretta (20 lettere, separate da virgola o spazio)
+                    <input
+                      className="mt-1 w-full rounded-md border border-stone-700 bg-stone-800 px-3 py-1.5 text-sm text-stone-100"
+                      onChange={(e) => updateReferenceField(AUSPICI_MEMORIA_SEQUENCE_KEY, e.target.value)}
+                      placeholder="G, Q, J, B, M, E, O, D, L, S, H, P, C, K, T, F, N, A, R, I"
+                      value={reference[AUSPICI_MEMORIA_SEQUENCE_KEY] ?? ''}
+                    />
+                  </label>
+                )}
+                <button
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-amber-500/50 px-3 py-1.5 text-sm font-semibold text-amber-300 hover:border-amber-400 disabled:opacity-50"
+                  disabled={savingReference}
+                  onClick={handleSaveReference}
+                  type="button"
+                >
+                  <Save className="h-4 w-4" />
+                  Salva riferimento
+                </button>
+              </div>
+            )}
+
             {participants.length === 0 ? (
               <p className="mt-4 text-sm text-stone-500">Aggiungi prima le squadre partecipanti qui sopra.</p>
             ) : (
@@ -652,10 +767,18 @@ export function AuspiciGestioneContent() {
                         {provaFields ? (
                           <>
                             {provaFields.map((field) => (
-                              <th className="py-2 pr-3" key={field.key}>{field.label}</th>
+                              <th className="py-2 pr-3" key={field.key}>
+                                {field.label}
+                                {field.unit && <span className="ml-1 normal-case text-stone-500">({field.unit})</span>}
+                              </th>
                             ))}
                             {prova === 'giuramento' && <th className="py-2 pr-3">Penalità tempo (-3)</th>}
-                            <th className="py-2 pr-3">Totale</th>
+                            <th className="py-2 pr-3">{prova === 'tiro' || prova === 'giuramento' ? 'Totale' : 'Somma piazzamenti'}</th>
+                          </>
+                        ) : prova === 'memoria' ? (
+                          <>
+                            <th className="py-2 pr-3">Sequenza inserita</th>
+                            <th className="py-2 pr-3">Punteggio</th>
                           </>
                         ) : (
                           <th className="py-2 pr-3">Valore grezzo</th>
@@ -686,11 +809,12 @@ export function AuspiciGestioneContent() {
                                       />
                                     ) : (
                                       <input
-                                        className="w-16 rounded border border-stone-700 bg-stone-800 px-2 py-1 text-stone-100"
+                                        className="w-20 rounded border border-stone-700 bg-stone-800 px-2 py-1 text-stone-100"
                                         disabled={row.is_position_overridden}
                                         max={field.max}
-                                        min={field.kind === 'score' ? 0 : 1}
+                                        min={field.kind === 'score' ? 0 : undefined}
                                         onChange={(e) => updateDetailField(row.participant_id, field.key, e.target.value)}
+                                        step={field.kind === 'score' ? 1 : 'any'}
                                         type="number"
                                         value={row.detail[field.key] ?? ''}
                                       />
@@ -707,6 +831,19 @@ export function AuspiciGestioneContent() {
                                     />
                                   </td>
                                 )}
+                                <td className="py-1.5 pr-3 font-semibold text-stone-300">{row.raw_score || '-'}</td>
+                              </>
+                            ) : prova === 'memoria' ? (
+                              <>
+                                <td className="py-1.5 pr-3">
+                                  <input
+                                    className="w-64 rounded border border-stone-700 bg-stone-800 px-2 py-1 text-stone-100"
+                                    disabled={row.is_position_overridden}
+                                    onChange={(e) => updateDetailField(row.participant_id, AUSPICI_MEMORIA_SEQUENCE_KEY, e.target.value)}
+                                    placeholder="B, G, Q, ..."
+                                    value={row.detail[AUSPICI_MEMORIA_SEQUENCE_KEY] ?? ''}
+                                  />
+                                </td>
                                 <td className="py-1.5 pr-3 font-semibold text-stone-300">{row.raw_score || '-'}</td>
                               </>
                             ) : (
