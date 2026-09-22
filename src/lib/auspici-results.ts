@@ -79,10 +79,129 @@ export const AUSPICI_MEMORIA_SEQUENCE_KEY = 'sequence';
 
 // Chiavi dei campi dell'horror vacui (Investitura): punteggio netto =
 // corretti - errori (regolamento punto 9.3.3); l'ordine di consegna è
-// facoltativo e vale solo come ultimo criterio di parità.
-export const AUSPICI_HORROR_VACUI_CORRETTI_KEY = 'horror_vacui_corretti';
+// facoltativo e vale solo come ultimo criterio di parità. Gli elementi
+// corretti si spuntano dal catalogo (auspiciHorrorVacuiCatalog) invece di
+// essere contati a mano: il conteggio è sempre derivato dalla checklist.
+export const AUSPICI_HORROR_VACUI_ITEMS_KEY = 'horror_vacui_items';
 export const AUSPICI_HORROR_VACUI_ERRORI_KEY = 'horror_vacui_errori';
 export const AUSPICI_HORROR_VACUI_ORDINE_KEY = 'horror_vacui_ordine';
+
+export interface AuspiciHorrorVacuiCategory {
+  category: string;
+  items: string[];
+}
+
+// Catalogo di riferimento per la correzione dell'horror vacui (regolamento
+// punto 9.3.3): ogni voce spuntabile corrisponde a un elemento riconoscibile
+// nell'immagine predisposta per la serata. Singolare/plurale e sinonimi
+// evidenti sono da considerarsi equivalenti alla voce corrispondente (le
+// categorie generiche da sole non valgono come risposta).
+export const auspiciHorrorVacuiCatalog: AuspiciHorrorVacuiCategory[] = [
+  {
+    category: 'Architettura e piazza',
+    items: [
+      'Torre con orologio (Torre del Bramante)', 'Portici', 'Archi', 'Colonne', 'Balconi', 'Finestre',
+      'Facciate decorate', 'Castello con torri e merlature', 'Fontana centrale', 'Statue su piedistalli',
+      'Pavimentazione in pietra', 'Bancarelle', 'Tende a righe',
+    ],
+  },
+  {
+    category: 'Bandiere e simboli',
+    items: [
+      'Stendardi multicolori', 'Bandiere a strisce', 'Aquile nere', 'Biscione blu', 'Drago verde',
+      'Torri bianche', 'Gigli dorati', 'Soli con volto', 'Scudi araldici',
+    ],
+  },
+  {
+    category: 'Personaggi',
+    items: [
+      'Cavaliere sul cavallo bianco', 'Dame in abiti rinascimentali', 'Paggi', 'Sbandieratori', 'Tamburini',
+      'Suonatori di strumenti a fiato', 'Suonatori di liuto', 'Pittore', 'Scultore del legno',
+      'Donna che lavora al telaio', 'Bambini che giocano', 'Figuranti sotto i portici', 'Figuranti affacciati alle finestre',
+    ],
+  },
+  {
+    category: 'Abiti e accessori',
+    items: [
+      'Vestiti ricamati', 'Mantelli', 'Cappelli piumati', 'Berretti', 'Copricapi femminili', 'Collane',
+      'Cinture', 'Borse', 'Piccoli sacchetti',
+    ],
+  },
+  {
+    category: 'Animali',
+    items: [
+      'Cavallo bianco', 'Cani', 'Gatti', 'Pavoni', 'Rapaci in volo', 'Rapace appollaiato', 'Gufi', 'Oche',
+      'Gallina', 'Pulcini', 'Conigli', 'Riccio', 'Rane', 'Pesci', 'Chiocciola', 'Farfalle',
+    ],
+  },
+  {
+    category: 'Musica',
+    items: [
+      'Tamburi', 'Bacchette', 'Liuti', 'Strumenti a fiato lunghi e dorati',
+      'Piccoli strumenti a fiato appoggiati fra gli oggetti',
+    ],
+  },
+  {
+    category: 'Pittura e artigianato',
+    items: [
+      'Cavalletto', 'Quadro con una veduta', 'Tavolozza', 'Pennelli', 'Contenitori per pennelli',
+      'Sculture di legno', 'Attrezzi da intaglio', 'Banco da lavoro', 'Telaio', 'Tessuti', 'Rocchetti di filo',
+      'Gomitoli', 'Nastri',
+    ],
+  },
+  {
+    category: 'Giochi',
+    items: ['Trottole colorate', 'Biglie', 'Dadi', 'Scacchi bianchi e neri'],
+  },
+  {
+    category: 'Libri e scrittura',
+    items: [
+      'Libri chiusi e impilati', 'Grande libro aperto illustrato', 'Pergamene arrotolate', 'Penne d’oca', 'Calamai',
+    ],
+  },
+  {
+    category: 'Oggetti preziosi e maschere',
+    items: [
+      'Corona dorata', 'Collane di perle', 'Catene', 'Gioielli', 'Monete', 'Maschere decorative',
+      'Specchio ovale con cornice dorata', 'Scrigni', 'Piccoli bauli',
+    ],
+  },
+  {
+    category: 'Oggetti e utensili',
+    items: [
+      'Chiavi antiche', 'Lucchetti', 'Forbici', 'Clessidra', 'Quadrante circolare decorato', 'Candele',
+      'Candelieri', 'Lanterne', 'Corde', 'Campanelle', 'Piccoli contenitori',
+    ],
+  },
+  {
+    category: 'Recipienti e arredi',
+    items: [
+      'Botti', 'Cassette di legno', 'Cesti intrecciati', 'Tavoli', 'Sgabelli', 'Vasi decorati', 'Brocche',
+      'Bottiglie', 'Coppe', 'Calici', 'Tazze', 'Ciotole', 'Piatti', 'Pentole metalliche', 'Recipienti di rame',
+      'Cucchiai di legno',
+    ],
+  },
+  {
+    category: 'Cibo',
+    items: [
+      'Pagnotte', 'Pani allungati', 'Forme e spicchi di formaggio', 'Crostata', 'Uva', 'Mele', 'Pere',
+      'Limoni', 'Zucche', 'Carote', 'Cipolle', 'Aglio', 'Noci o castagne', 'Ciotola di legumi',
+    ],
+  },
+  {
+    category: 'Fiori e vegetazione',
+    items: [
+      'Girasoli', 'Rose', 'Piccoli fiori bianchi', 'Fiori colorati (rossi, rosa, viola, blu)', 'Mazzi di fiori',
+      'Ghirlande', 'Piante rampicanti', 'Foglie', 'Erbe', 'Alberelli con agrumi', 'Ninfee',
+    ],
+  },
+  {
+    category: 'Acqua e cielo',
+    items: [
+      'Vasca con pesci e rane', 'Acqua della fontana', 'Tratti di cielo azzurro', 'Nuvole',
+    ],
+  },
+];
 
 // Scomposizione nelle singole componenti di ogni prova:
 // - 'estimate' (Mercante): valore stimato da confrontare con un valore di
@@ -114,7 +233,6 @@ export const auspiciProvaFields: Partial<Record<AuspiciProva, AuspiciProvaField[
   investitura: [
     { direction: 'asc', key: 'torre', kind: 'metric', label: 'Tempo montaggio torre', unit: 's' },
     { direction: 'desc', key: 'castello', kind: 'metric', label: 'Altezza castello di carte', unit: 'cm' },
-    { key: AUSPICI_HORROR_VACUI_CORRETTI_KEY, kind: 'count', label: 'Horror vacui · elementi corretti' },
     { key: AUSPICI_HORROR_VACUI_ERRORI_KEY, kind: 'count', label: 'Horror vacui · elementi errati' },
     { key: AUSPICI_HORROR_VACUI_ORDINE_KEY, kind: 'count', label: 'Horror vacui · ordine di consegna (facoltativo)' },
   ],
@@ -216,6 +334,19 @@ const compareAuspiciHorrorVacui = (a: AuspiciHorrorVacuiEntry, b: AuspiciHorrorV
   return 0;
 };
 
+// Gli elementi spuntati nella checklist horror vacui sono salvati come lista
+// di id "categoria:elemento" separati da virgola (stessa convenzione di
+// stringa usata per tutti gli altri campi di dettaglio).
+export const parseAuspiciHorrorVacuiItems = (raw: string): string[] =>
+  raw.split(',').map((item) => item.trim()).filter((item) => item.length > 0);
+
+export const toggleAuspiciHorrorVacuiItem = (raw: string, itemId: string): string => {
+  const current = new Set(parseAuspiciHorrorVacuiItems(raw));
+  if (current.has(itemId)) current.delete(itemId);
+  else current.add(itemId);
+  return Array.from(current).join(',');
+};
+
 // Normalizza una sequenza inserita a mano (lettere/codici separati da
 // virgole o spazi) in un array di codici confrontabili.
 export const parseAuspiciSequence = (raw: string): string[] =>
@@ -307,16 +438,16 @@ export function calculateAuspiciRows(
       castelloDirection
     );
     const horrorVacuiEntries = rows.map((row) => {
-      const corretti = parsePalioInteger(row.detail[AUSPICI_HORROR_VACUI_CORRETTI_KEY] ?? '');
+      const corretti = parseAuspiciHorrorVacuiItems(row.detail[AUSPICI_HORROR_VACUI_ITEMS_KEY] ?? '').length;
       const errori = parsePalioInteger(row.detail[AUSPICI_HORROR_VACUI_ERRORI_KEY] ?? '');
-      if (corretti === null && errori === null) {
+      if (corretti === 0 && errori === null) {
         return { participant_id: row.participant_id, value: null };
       }
       return {
         participant_id: row.participant_id,
         value: {
           errori: errori ?? 0,
-          net: (corretti ?? 0) - (errori ?? 0),
+          net: corretti - (errori ?? 0),
           ordine: parsePalioInteger(row.detail[AUSPICI_HORROR_VACUI_ORDINE_KEY] ?? ''),
         },
       };

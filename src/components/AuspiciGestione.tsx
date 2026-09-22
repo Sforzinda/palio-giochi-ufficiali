@@ -1,5 +1,5 @@
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { Eye, EyeOff, PlusCircle, Save, Trash2, UserPlus, Users } from 'lucide-react';
+import { Fragment, type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { ChevronDown, ChevronRight, Eye, EyeOff, PlusCircle, Save, Trash2, UserPlus, Users } from 'lucide-react';
 import { getSupabaseClient } from '../config';
 import { PalioAuthGate } from './PalioAuthGate';
 import type { Contrada } from '../hooks/usePalioLiveData';
@@ -13,15 +13,19 @@ import type {
 } from '../hooks/useAuspiciData';
 import {
   AUSPICI_GIURAMENTO_PENALTY_KEY,
+  AUSPICI_HORROR_VACUI_ITEMS_KEY,
   AUSPICI_MEMORIA_SEQUENCE_KEY,
   type AuspiciResultInput,
   auspiciCartaLabels,
+  auspiciHorrorVacuiCatalog,
   auspiciProvaFields,
   auspiciProvaLabels,
   auspiciProvaOrder,
   auspiciProvaRawScoreLabels,
   auspiciProvasWithReference,
   calculateAuspiciRows,
+  parseAuspiciHorrorVacuiItems,
+  toggleAuspiciHorrorVacuiItem,
   validateAuspiciRows,
 } from '../lib/auspici-results';
 import { parsePalioNumber } from '../lib/palio-results';
@@ -61,6 +65,7 @@ export function AuspiciGestioneContent() {
   const [prova, setProva] = useState<AuspiciProva>('mercante');
   const [results, setResults] = useState<AuspiciResultInput[]>([]);
   const [reference, setReference] = useState<Record<string, string>>({});
+  const [horrorVacuiChecklistParticipantId, setHorrorVacuiChecklistParticipantId] = useState<string | null>(null);
   const [adjustments, setAdjustments] = useState<AuspiciAdjustment[]>([]);
   const [carte, setCarte] = useState<AuspiciCarta[]>([]);
   const [newAdjustment, setNewAdjustment] = useState({ participantId: '', points: '', reason: '' });
@@ -270,6 +275,14 @@ export function AuspiciGestioneContent() {
     setReference((prev) => ({ ...prev, [fieldKey]: value }));
   }
 
+  function toggleHorrorVacuiItem(participantId: string, itemId: string) {
+    setResults((prev) => prev.map((row) => (
+      row.participant_id === participantId
+        ? { ...row, detail: { ...row.detail, [AUSPICI_HORROR_VACUI_ITEMS_KEY]: toggleAuspiciHorrorVacuiItem(row.detail[AUSPICI_HORROR_VACUI_ITEMS_KEY] ?? '', itemId) } }
+        : row
+    )));
+  }
+
   async function handleSaveReference() {
     if (!selectedEditionId) {
       setStatusMessage("Seleziona prima un'edizione");
@@ -448,6 +461,9 @@ export function AuspiciGestioneContent() {
           });
           if (prova === 'giuramento' && row.detail[AUSPICI_GIURAMENTO_PENALTY_KEY] === 'true') {
             detailJson[AUSPICI_GIURAMENTO_PENALTY_KEY] = true;
+          }
+          if (prova === 'investitura') {
+            detailJson[AUSPICI_HORROR_VACUI_ITEMS_KEY] = row.detail[AUSPICI_HORROR_VACUI_ITEMS_KEY] ?? '';
           }
         } else if (prova === 'memoria') {
           detailJson = { [AUSPICI_MEMORIA_SEQUENCE_KEY]: row.detail[AUSPICI_MEMORIA_SEQUENCE_KEY] ?? '' };
@@ -773,6 +789,7 @@ export function AuspiciGestioneContent() {
                               </th>
                             ))}
                             {prova === 'giuramento' && <th className="py-2 pr-3">Penalità tempo (-3)</th>}
+                            {prova === 'investitura' && <th className="py-2 pr-3">Horror vacui · corretti</th>}
                             <th className="py-2 pr-3">{prova === 'tiro' || prova === 'giuramento' ? 'Totale' : 'Somma piazzamenti'}</th>
                           </>
                         ) : prova === 'memoria' ? (
@@ -793,8 +810,11 @@ export function AuspiciGestioneContent() {
                       {displayRows.map((row) => {
                         const status = validation.statusByParticipantId.get(row.participant_id);
                         const name = participants.find((p) => p.id === row.participant_id)?.name ?? '';
+                        const isHorrorVacuiChecklistOpen = prova === 'investitura' && horrorVacuiChecklistParticipantId === row.participant_id;
+                        const checkedHorrorVacuiItems = parseAuspiciHorrorVacuiItems(row.detail[AUSPICI_HORROR_VACUI_ITEMS_KEY] ?? '');
                         return (
-                          <tr className="border-b border-stone-800/60" key={row.participant_id}>
+                          <Fragment key={row.participant_id}>
+                          <tr className="border-b border-stone-800/60">
                             <td className="py-1.5 pr-3 font-semibold text-stone-200">{name}</td>
                             {provaFields ? (
                               <>
@@ -829,6 +849,18 @@ export function AuspiciGestioneContent() {
                                       onChange={(e) => updateDetailField(row.participant_id, AUSPICI_GIURAMENTO_PENALTY_KEY, e.target.checked ? 'true' : '')}
                                       type="checkbox"
                                     />
+                                  </td>
+                                )}
+                                {prova === 'investitura' && (
+                                  <td className="py-1.5 pr-3">
+                                    <button
+                                      className="inline-flex items-center gap-1 rounded border border-stone-700 px-2 py-1 text-xs font-semibold text-stone-200 hover:border-palio-400"
+                                      onClick={() => setHorrorVacuiChecklistParticipantId((prev) => (prev === row.participant_id ? null : row.participant_id))}
+                                      type="button"
+                                    >
+                                      {horrorVacuiChecklistParticipantId === row.participant_id ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                                      {parseAuspiciHorrorVacuiItems(row.detail[AUSPICI_HORROR_VACUI_ITEMS_KEY] ?? '').length} corretti
+                                    </button>
                                   </td>
                                 )}
                                 <td className="py-1.5 pr-3 font-semibold text-stone-300">{row.raw_score || '-'}</td>
@@ -882,6 +914,43 @@ export function AuspiciGestioneContent() {
                               />
                             </td>
                           </tr>
+                          {isHorrorVacuiChecklistOpen && (
+                            <tr className="border-b border-stone-800/60 bg-stone-950/60">
+                              <td className="p-3" colSpan={20}>
+                                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-300">
+                                  Checklist horror vacui — {name} ({checkedHorrorVacuiItems.length} corretti)
+                                </div>
+                                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                                  {auspiciHorrorVacuiCatalog.map((category, categoryIndex) => (
+                                    <div key={category.category}>
+                                      <p className="mb-1 text-[11px] font-semibold uppercase text-stone-400">{category.category}</p>
+                                      <ul className="space-y-0.5">
+                                        {category.items.map((item, itemIndex) => {
+                                          const itemId = `${categoryIndex}:${itemIndex}`;
+                                          const checked = checkedHorrorVacuiItems.includes(itemId);
+                                          return (
+                                            <li key={itemId}>
+                                              <label className="flex items-start gap-1.5 text-xs text-stone-300">
+                                                <input
+                                                  checked={checked}
+                                                  className="mt-0.5"
+                                                  disabled={row.is_position_overridden}
+                                                  onChange={() => toggleHorrorVacuiItem(row.participant_id, itemId)}
+                                                  type="checkbox"
+                                                />
+                                                {item}
+                                              </label>
+                                            </li>
+                                          );
+                                        })}
+                                      </ul>
+                                    </div>
+                                  ))}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                          </Fragment>
                         );
                       })}
                     </tbody>
