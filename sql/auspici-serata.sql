@@ -142,3 +142,25 @@ create policy "auspici_adjustments_manage_write" on public.auspici_adjustments
   for all using (public.can_manage_palio_games()) with check (public.can_manage_palio_games());
 create policy "auspici_carte_manage_write" on public.auspici_carte
   for all using (public.can_manage_palio_games()) with check (public.can_manage_palio_games());
+
+-- Regia diretta pubblica: consente di "fissare" sullo schermo pubblico una
+-- singola pagina (classifica generale, una prova specifica o le carte
+-- assegnate), analogamente a heats_focus_game/games_focus_game di
+-- public.palio_live_controls. Quando pinned_page è null, la pagina pubblica
+-- resta in rotazione automatica (comportamento di default).
+create table if not exists public.auspici_live_controls (
+  id uuid primary key default gen_random_uuid(),
+  edition_id uuid not null unique references public.auspici_editions(id) on delete cascade,
+  pinned_page text check (
+    pinned_page is null or pinned_page = any (array['ranking','carte','mercante','memoria','investitura','tiro','giuramento'])
+  ),
+  updated_at timestamptz not null default now(),
+  updated_by uuid references public.users(id)
+);
+
+alter table public.auspici_live_controls enable row level security;
+
+create policy "auspici_live_controls_public_read" on public.auspici_live_controls
+  for select using (true);
+create policy "auspici_live_controls_manage_write" on public.auspici_live_controls
+  for all using (public.can_manage_palio_games()) with check (public.can_manage_palio_games());

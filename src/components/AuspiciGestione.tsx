@@ -1,5 +1,5 @@
 import { Fragment, type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Eye, EyeOff, PlusCircle, Save, Trash2, UserPlus, Users } from 'lucide-react';
+import { ChevronDown, ChevronRight, Eye, EyeOff, Pin, PlusCircle, Repeat, Save, Trash2, UserPlus, Users } from 'lucide-react';
 import { getSupabaseClient } from '../config';
 import { PalioAuthGate } from './PalioAuthGate';
 import type { Contrada } from '../hooks/usePalioLiveData';
@@ -9,6 +9,7 @@ import type {
   AuspiciCartaType,
   AuspiciEdition,
   AuspiciParticipant,
+  AuspiciPinnedPage,
   AuspiciProva,
 } from '../hooks/useAuspiciData';
 import {
@@ -69,12 +70,14 @@ export function AuspiciGestioneContent() {
   const [adjustments, setAdjustments] = useState<AuspiciAdjustment[]>([]);
   const [carte, setCarte] = useState<AuspiciCarta[]>([]);
   const [newAdjustment, setNewAdjustment] = useState({ participantId: '', points: '', reason: '' });
+  const [pinnedPage, setPinnedPage] = useState<AuspiciPinnedPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingParticipants, setSavingParticipants] = useState(false);
   const [savingReference, setSavingReference] = useState(false);
   const [savingCarte, setSavingCarte] = useState(false);
   const [savingAdjustment, setSavingAdjustment] = useState(false);
+  const [savingPinnedPage, setSavingPinnedPage] = useState(false);
   const [togglingActive, setTogglingActive] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
 
@@ -167,6 +170,24 @@ export function AuspiciGestioneContent() {
     setCarte((data as AuspiciCarta[]) ?? []);
   }, [supabase]);
 
+  const fetchPinnedPage = useCallback(async (editionId: string) => {
+    if (!editionId) {
+      setPinnedPage(null);
+      return;
+    }
+    const { data, error } = await supabase
+      .from('auspici_live_controls')
+      .select('pinned_page')
+      .eq('edition_id', editionId)
+      .maybeSingle();
+    if (error) {
+      console.error('Error fetching auspici live controls:', error);
+      setPinnedPage(null);
+      return;
+    }
+    setPinnedPage((data?.pinned_page as AuspiciPinnedPage | null) ?? null);
+  }, [supabase]);
+
   useEffect(() => {
     async function loadInitialData() {
       setLoading(true);
@@ -183,7 +204,8 @@ export function AuspiciGestioneContent() {
     fetchParticipants(selectedEditionId);
     fetchAdjustments(selectedEditionId);
     fetchCarte(selectedEditionId);
-  }, [fetchAdjustments, fetchCarte, fetchParticipants, selectedEditionId]);
+    fetchPinnedPage(selectedEditionId);
+  }, [fetchAdjustments, fetchCarte, fetchParticipants, fetchPinnedPage, selectedEditionId]);
 
   useEffect(() => {
     fetchReference(selectedEditionId, prova);
@@ -363,6 +385,27 @@ export function AuspiciGestioneContent() {
       setStatusMessage(selectedEdition?.is_active ? 'Classifica pubblica disattivata' : 'Classifica pubblica attivata');
     } finally {
       setTogglingActive(false);
+    }
+  }
+
+  async function handleSetPinnedPage(page: AuspiciPinnedPage | null) {
+    if (!selectedEditionId) {
+      setStatusMessage("Seleziona prima un'edizione");
+      return;
+    }
+    setSavingPinnedPage(true);
+    try {
+      const { error } = await supabase
+        .from('auspici_live_controls')
+        .upsert({ edition_id: selectedEditionId, pinned_page: page, updated_at: new Date().toISOString() }, { onConflict: 'edition_id' });
+      if (error) {
+        setStatusMessage(`Errore aggiornamento regia: ${error.message}`);
+        return;
+      }
+      setPinnedPage(page);
+      setStatusMessage(page ? 'Pagina fissata sullo schermo pubblico' : 'Rotazione automatica riattivata');
+    } finally {
+      setSavingPinnedPage(false);
     }
   }
 
@@ -649,6 +692,63 @@ export function AuspiciGestioneContent() {
 
       {selectedEditionId && (
         <>
+          <section className="mt-6 rounded-lg border border-stone-800 bg-stone-900 p-4">
+            <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-stone-300">
+              <Pin className="h-4 w-4" />
+              Regia diretta pubblica
+            </h2>
+            <p className="mt-1 text-xs text-stone-400">
+              Fissa sullo schermo pubblico una singola classifica (ferma la rotazione automatica), oppure torna alla
+              rotazione automatica tra tutte le pagine disponibili.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-semibold transition disabled:opacity-50 ${
+                  pinnedPage === null ? 'bg-emerald-600 text-white' : 'border border-stone-700 text-stone-300 hover:border-palio-400'
+                }`}
+                disabled={savingPinnedPage || pinnedPage === null}
+                onClick={() => handleSetPinnedPage(null)}
+                type="button"
+              >
+                <Repeat className="h-4 w-4" />
+                Automatico (rotazione)
+              </button>
+              <button
+                className={`rounded-md px-3 py-1.5 text-sm font-semibold transition disabled:opacity-50 ${
+                  pinnedPage === 'ranking' ? 'bg-palio-500 text-white' : 'border border-stone-700 text-stone-300 hover:border-palio-400'
+                }`}
+                disabled={savingPinnedPage || pinnedPage === 'ranking'}
+                onClick={() => handleSetPinnedPage('ranking')}
+                type="button"
+              >
+                Classifica generale
+              </button>
+              {auspiciProvaOrder.map((p) => (
+                <button
+                  className={`rounded-md px-3 py-1.5 text-sm font-semibold transition disabled:opacity-50 ${
+                    pinnedPage === p ? 'bg-palio-500 text-white' : 'border border-stone-700 text-stone-300 hover:border-palio-400'
+                  }`}
+                  disabled={savingPinnedPage || pinnedPage === p}
+                  key={p}
+                  onClick={() => handleSetPinnedPage(p)}
+                  type="button"
+                >
+                  {auspiciProvaLabels[p]}
+                </button>
+              ))}
+              <button
+                className={`rounded-md px-3 py-1.5 text-sm font-semibold transition disabled:opacity-50 ${
+                  pinnedPage === 'carte' ? 'bg-palio-500 text-white' : 'border border-stone-700 text-stone-300 hover:border-palio-400'
+                }`}
+                disabled={savingPinnedPage || pinnedPage === 'carte'}
+                onClick={() => handleSetPinnedPage('carte')}
+                type="button"
+              >
+                Carte assegnate
+              </button>
+            </div>
+          </section>
+
           <section className="mt-6 rounded-lg border border-stone-800 bg-stone-900 p-4">
             <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-stone-300">
               <Users className="h-4 w-4" />

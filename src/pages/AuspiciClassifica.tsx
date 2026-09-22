@@ -63,7 +63,7 @@ function useFitScale<Content extends HTMLElement, Container extends HTMLElement>
 type ClassificaPage = { type: 'ranking' } | { type: 'carte' } | { prova: AuspiciProva; type: 'prova' };
 
 export function AuspiciClassifica() {
-  const { carte, edition, loading, participants, ranking } = useAuspiciData('auspici-classifica-page');
+  const { carte, edition, loading, participants, pinnedPage, ranking } = useAuspiciData('auspici-classifica-page');
   const totalParticipants = participants.length;
 
   const pages = useMemo<ClassificaPage[]>(() => {
@@ -79,6 +79,15 @@ export function AuspiciClassifica() {
     return result;
   }, [carte, ranking]);
 
+  // Se la regia ha fissato una pagina (auspici_live_controls.pinned_page),
+  // quella resta mostrata staticamente e la rotazione si ferma.
+  const pinnedClassificaPage = useMemo<ClassificaPage | null>(() => {
+    if (!pinnedPage) return null;
+    if (pinnedPage === 'ranking') return { type: 'ranking' };
+    if (pinnedPage === 'carte') return { type: 'carte' };
+    return { prova: pinnedPage, type: 'prova' };
+  }, [pinnedPage]);
+
   const [pageIndex, setPageIndex] = useState(0);
 
   useEffect(() => {
@@ -86,14 +95,14 @@ export function AuspiciClassifica() {
   }, [edition?.id]);
 
   useEffect(() => {
-    if (pages.length <= 1) return;
+    if (pinnedClassificaPage || pages.length <= 1) return;
     const interval = setInterval(() => {
       setPageIndex((prev) => (prev + 1) % pages.length);
     }, ROTATION_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [pages.length]);
+  }, [pages.length, pinnedClassificaPage]);
 
-  const currentPage = pages.length > 0 ? pages[pageIndex % pages.length] : null;
+  const currentPage = pinnedClassificaPage ?? (pages.length > 0 ? pages[pageIndex % pages.length] : null);
   const { containerRef, contentRef, scale } = useFitScale<HTMLDivElement, HTMLDivElement>(currentPage);
 
   return (
@@ -236,7 +245,7 @@ export function AuspiciClassifica() {
           )}
         </main>
 
-        {pages.length > 1 && (
+        {!pinnedClassificaPage && pages.length > 1 && (
           <div className="relative z-10 flex shrink-0 items-center justify-center gap-2 pb-3">
             {pages.map((page, index) => (
               <span

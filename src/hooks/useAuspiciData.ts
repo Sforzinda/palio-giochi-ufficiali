@@ -51,6 +51,10 @@ export interface AuspiciCarta {
   used: boolean;
 }
 
+// Pagina "fissata" dalla regia sullo schermo pubblico (vedi
+// auspici_live_controls.pinned_page): null = rotazione automatica.
+export type AuspiciPinnedPage = 'ranking' | 'carte' | AuspiciProva;
+
 export interface AuspiciRankingItem {
   giuramentoPosition: number | null;
   id: string;
@@ -132,6 +136,7 @@ export interface AuspiciData {
   edition: AuspiciEdition | null;
   loading: boolean;
   participants: AuspiciParticipant[];
+  pinnedPage: AuspiciPinnedPage | null;
   ranking: AuspiciRankingItem[];
   results: AuspiciResult[];
 }
@@ -143,6 +148,7 @@ export function useAuspiciData(channelName: string): AuspiciData {
   const [results, setResults] = useState<AuspiciResult[]>([]);
   const [adjustments, setAdjustments] = useState<AuspiciAdjustment[]>([]);
   const [carte, setCarte] = useState<AuspiciCarta[]>([]);
+  const [pinnedPage, setPinnedPage] = useState<AuspiciPinnedPage | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
@@ -167,6 +173,7 @@ export function useAuspiciData(channelName: string): AuspiciData {
       setResults([]);
       setAdjustments([]);
       setCarte([]);
+      setPinnedPage(null);
       setLoading(false);
       return;
     }
@@ -176,6 +183,7 @@ export function useAuspiciData(channelName: string): AuspiciData {
       { data: resultsData, error: resultsError },
       { data: adjustmentsData, error: adjustmentsError },
       { data: carteData, error: carteError },
+      { data: liveControlData, error: liveControlError },
     ] = await Promise.all([
       supabase
         .from('auspici_participants')
@@ -195,6 +203,11 @@ export function useAuspiciData(channelName: string): AuspiciData {
         .from('auspici_carte')
         .select('participant_id, carta, used')
         .eq('edition_id', activeEdition.id),
+      supabase
+        .from('auspici_live_controls')
+        .select('pinned_page')
+        .eq('edition_id', activeEdition.id)
+        .maybeSingle(),
     ]);
 
     if (participantsError) {
@@ -225,6 +238,13 @@ export function useAuspiciData(channelName: string): AuspiciData {
       setCarte((carteData as AuspiciCarta[]) ?? []);
     }
 
+    if (liveControlError) {
+      console.error('Error fetching auspici live controls:', liveControlError);
+      setPinnedPage(null);
+    } else {
+      setPinnedPage((liveControlData?.pinned_page as AuspiciPinnedPage | null) ?? null);
+    }
+
     setLoading(false);
   }, [supabase]);
 
@@ -240,6 +260,7 @@ export function useAuspiciData(channelName: string): AuspiciData {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'auspici_results' }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'auspici_adjustments' }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'auspici_carte' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'auspici_live_controls' }, () => fetchData())
       .subscribe();
 
     return () => {
@@ -252,5 +273,5 @@ export function useAuspiciData(channelName: string): AuspiciData {
     [adjustments, participants, results]
   );
 
-  return { adjustments, carte, edition, loading, participants, ranking, results };
+  return { adjustments, carte, edition, loading, participants, pinnedPage, ranking, results };
 }
