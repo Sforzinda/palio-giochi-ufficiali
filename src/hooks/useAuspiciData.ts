@@ -24,6 +24,7 @@ export interface AuspiciEdition {
 
 export interface AuspiciParticipant {
   contrada_id: string | null;
+  headcount: number | null;
   id: string;
   name: string;
   sort_order: number;
@@ -187,7 +188,7 @@ export function useAuspiciData(channelName: string): AuspiciData {
     ] = await Promise.all([
       supabase
         .from('auspici_participants')
-        .select('id, name, contrada_id, sort_order')
+        .select('id, name, contrada_id, sort_order, headcount')
         .eq('edition_id', activeEdition.id)
         .order('sort_order')
         .order('name'),

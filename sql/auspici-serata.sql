@@ -35,8 +35,14 @@ create table if not exists public.auspici_participants (
   name text not null,
   contrada_id uuid references public.contrade(id),
   sort_order integer not null default 0,
+  -- Numero di persone presenti alla cena per questa squadra/Contrada,
+  -- inserito dall'Admin; null finché non viene compilato.
+  headcount integer check (headcount is null or headcount >= 0),
   unique (edition_id, name)
 );
+
+alter table public.auspici_participants
+  add column if not exists headcount integer check (headcount is null or headcount >= 0);
 
 create type public.auspici_prova as enum (
   'mercante',      -- Mercante di Vigevano (5 stime, somma piazzamenti, vince il più basso)

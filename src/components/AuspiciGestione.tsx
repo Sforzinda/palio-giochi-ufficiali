@@ -100,7 +100,7 @@ export function AuspiciGestioneContent() {
     }
     const { data, error } = await supabase
       .from('auspici_participants')
-      .select('id, name, contrada_id, sort_order')
+      .select('id, name, contrada_id, sort_order, headcount')
       .eq('edition_id', editionId)
       .order('sort_order')
       .order('name');
@@ -460,6 +460,19 @@ export function AuspiciGestioneContent() {
     }
   }
 
+  async function handleUpdateHeadcount(participantId: string, value: string) {
+    const trimmed = value.trim();
+    const headcount = trimmed === '' ? null : Number.parseInt(trimmed, 10);
+    if (headcount !== null && (Number.isNaN(headcount) || headcount < 0)) return;
+
+    setParticipants((prev) => prev.map((p) => (p.id === participantId ? { ...p, headcount } : p)));
+    const { error } = await supabase.from('auspici_participants').update({ headcount }).eq('id', participantId);
+    if (error) {
+      setStatusMessage(`Errore salvataggio partecipanti: ${error.message}`);
+      await fetchParticipants(selectedEditionId);
+    }
+  }
+
   async function handleRemoveParticipant(participantId: string) {
     setSavingParticipants(true);
     try {
@@ -802,6 +815,17 @@ export function AuspiciGestioneContent() {
                 >
                   {participant.name}
                   {!participant.contrada_id && <span className="text-[10px] uppercase text-amber-400">extra</span>}
+                  <label className="flex items-center gap-1 text-xs text-stone-400" title="Numero di partecipanti presenti">
+                    <UserPlus className="h-3 w-3" />
+                    <input
+                      className="w-14 rounded border border-stone-700 bg-stone-900 px-1.5 py-0.5 text-xs text-stone-100"
+                      min={0}
+                      onChange={(e) => handleUpdateHeadcount(participant.id, e.target.value)}
+                      placeholder="—"
+                      type="number"
+                      value={participant.headcount ?? ''}
+                    />
+                  </label>
                   <button onClick={() => handleRemoveParticipant(participant.id)} type="button">
                     <Trash2 className="h-3.5 w-3.5 text-stone-500 hover:text-red-400" />
                   </button>
@@ -809,6 +833,11 @@ export function AuspiciGestioneContent() {
               ))}
               {participants.length === 0 && <li className="text-sm text-stone-500">Nessuna squadra ancora aggiunta</li>}
             </ul>
+            {participants.length > 0 && (
+              <p className="mt-2 text-xs text-stone-500">
+                Totale partecipanti presenti: {participants.reduce((sum, p) => sum + (p.headcount ?? 0), 0)}
+              </p>
+            )}
           </section>
 
           <section className="mt-6 rounded-lg border border-stone-800 bg-stone-900 p-4">
