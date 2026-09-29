@@ -10,6 +10,7 @@
 --     al massimo uno per ruolo e per batteria;
 --   * extra: is_extra = true, legato a una batteria (heat_number) oppure
 --     all'intero gioco (heat_number null), in numero libero.
+-- I ruoli giudice_campo e giudice_gonna valgono solo per il cerchio.
 -- Le prove senza batterie (melocotogno, finale) usano heat_number = 1.
 
 create table if not exists public.palio_judges (
@@ -24,10 +25,18 @@ create unique index if not exists palio_judges_name_unique
 do $$ begin
   create type public.palio_judge_role as enum (
     'cronometrista',  -- rileva il tempo della batteria
-    'giudice'         -- giudice delle penalità
+    'giudice',        -- giudice delle penalità
+    'giudice_campo',  -- giudice di campo (solo cerchio)
+    'giudice_gonna',  -- giudice della gonna (solo cerchio)
+    'giudice_fantapalio'  -- giudice del FantaPalio
   );
 exception when duplicate_object then null;
 end $$;
+
+-- Per chi ha già creato il tipo con i soli due ruoli iniziali.
+alter type public.palio_judge_role add value if not exists 'giudice_campo';
+alter type public.palio_judge_role add value if not exists 'giudice_gonna';
+alter type public.palio_judge_role add value if not exists 'giudice_fantapalio';
 
 create table if not exists public.palio_judge_assignments (
   id uuid primary key default gen_random_uuid(),
@@ -63,3 +72,9 @@ create policy "palio_judges_manage" on public.palio_judges
   for all using (public.can_manage_palio_games()) with check (public.can_manage_palio_games());
 create policy "palio_judge_assignments_manage" on public.palio_judge_assignments
   for all using (public.can_manage_palio_games()) with check (public.can_manage_palio_games());
+
+-- Contrada di appartenenza (opzionale): un giudice abbinato a una Contrada non
+-- può mai avere un incarico (in nessun ruolo) nelle batterie in cui gareggia
+-- quella Contrada. Il vincolo è applicato dalla Gestione.
+alter table public.palio_judges
+  add column if not exists contrada_id uuid references public.contrade(id) on delete set null;

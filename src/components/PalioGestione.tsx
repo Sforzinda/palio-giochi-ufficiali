@@ -1275,7 +1275,7 @@ function PalioResultsInputContent() {
 
       {activeSection === 'giudici' && (
         <div className="mt-4">
-          <PalioGiudici availableGames={availableGames} edition={selectedEdition} heats={heats} />
+          <PalioGiudici availableGames={availableGames} contrade={contrade} edition={selectedEdition} heats={heats} />
         </div>
       )}
 
