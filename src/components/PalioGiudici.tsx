@@ -1,14 +1,17 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { Gavel, Plus, Timer, Trash2, X } from 'lucide-react';
+import { Gavel, Plus, Timer, Trash2, Wand2, X } from 'lucide-react';
 import { getSupabaseClient } from '../config';
 import { type Contrada, type PalioEdition, type PalioEditionHeat, type PalioGame, palioGameLabels } from '../hooks/usePalioLiveData';
 
 type JudgeRole = 'cronometrista' | 'giudice' | 'giudice_campo' | 'giudice_gonna' | 'giudice_fantapalio';
 
+type JudgePreference = 'cronometrista' | 'giudice';
+
 interface Judge {
-  contrada_id: string | null;
+  contrada_ids: string[];
   id: string;
   name: string;
+  preferred_role: JudgePreference | null;
 }
 
 interface JudgeAssignment {
@@ -18,6 +21,18 @@ interface JudgeAssignment {
   is_extra: boolean;
   judge_id: string;
   role: JudgeRole;
+}
+
+const preferenceLabels: Record<JudgePreference, string> = {
+  cronometrista: 'Preferisce fare il cronometrista',
+  giudice: 'Preferisce fare il giudice',
+};
+
+// Prove senza batterie (melocotogno, finale): un'unica "batteria" 1.
+function getHeatNumbers(heats: PalioEditionHeat[], game: PalioGame): number[] {
+  if (game === 'melocotogno' || game === 'finale') return [1];
+  return Array.from(new Set(heats.filter((heat) => heat.game === game).map((heat) => heat.heat_number)))
+    .sort((a, b) => a - b);
 }
 
 const baseJudgeRoles: JudgeRole[] = ['cronometrista', 'giudice', 'giudice_fantapalio'];
@@ -47,6 +62,39 @@ interface PalioGiudiciProps {
   contrade: Contrada[];
   edition: PalioEdition | null;
   heats: PalioEditionHeat[];
+}
+
+interface ContradaPickerProps {
+  contrade: Contrada[];
+  disabled: boolean;
+  label: string;
+  onToggle: (contradaId: string, checked: boolean) => void;
+  selectedIds: string[];
+}
+
+// Selezione multipla compatta delle Contrade abbinate a un giudice.
+function ContradaPicker({ contrade, disabled, label, onToggle, selectedIds }: ContradaPickerProps) {
+  const names = contrade.filter((c) => selectedIds.includes(c.id)).map((c) => c.name);
+  return (
+    <details className="rounded-md border border-stone-700 bg-stone-800 text-xs text-stone-200">
+      <summary aria-label={label} className="cursor-pointer px-2 py-1">
+        {names.length > 0 ? names.join(', ') : 'Nessuna Contrada'}
+      </summary>
+      <div className="grid gap-1 border-t border-stone-700 p-2">
+        {contrade.map((contrada) => (
+          <label key={contrada.id} className="flex items-center gap-2">
+            <input
+              checked={selectedIds.includes(contrada.id)}
+              disabled={disabled}
+              onChange={(e) => onToggle(contrada.id, e.target.checked)}
+              type="checkbox"
+            />
+            {contrada.name}
+          </label>
+        ))}
+      </div>
+    </details>
+  );
 }
 
 interface ExtraAdderProps {
@@ -87,7 +135,7 @@ function ExtraAdder({ disabled, judgeOptions, onAdd, roles }: ExtraAdderProps) {
  * batteria di ogni gioco, di un cronometrista e di un giudice delle penalità
  * (titolari), più eventuali extra validi per una batteria o per l'intero gioco.
  * Un giudice abbinato a una Contrada non può mai avere incarichi nelle batterie
- * in cui gareggia quella Contrada.
+ * in cui gareggia una di quelle Contrade.
  */
 export function PalioGiudici({ availableGames, contrade, edition, heats }: PalioGiudiciProps) {
   const supabase = useMemo(() => getSupabaseClient(), []);
@@ -96,7 +144,8 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [newJudgeName, setNewJudgeName] = useState('');
-  const [newJudgeContradaId, setNewJudgeContradaId] = useState('');
+  const [newJudgeContradaIds, setNewJudgeContradaIds] = useState<string[]>([]);
+  const [newJudgePreference, setNewJudgePreference] = useState('');
   const [selectedGame, setSelectedGame] = useState<PalioGame>(availableGames[0]);
   const [message, setMessage] = useState('');
 
@@ -104,12 +153,17 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
   const game = availableGames.includes(selectedGame) ? selectedGame : availableGames[0];
 
   const fetchJudges = useCallback(async () => {
-    const { data, error } = await supabase.from('palio_judges').select('id, name, contrada_id').order('name');
+    const { data, error } = await supabase
+      .from('palio_judges')
+      .select('id, name, preferred_role, palio_judge_contrade(contrada_id)')
+      .order('name');
     if (error) {
       setMessage(`Errore caricamento giudici: ${error.message}`);
       return;
     }
-    setJudges((data as Judge[]) ?? []);
+    setJudges(((data ?? []) as unknown as (Omit<Judge, 'contrada_ids'> & { palio_judge_contrade: { contrada_id: string }[] })[]).map(
+      ({ palio_judge_contrade: links, ...judge }) => ({ ...judge, contrada_ids: links.map((link) => link.contrada_id) })
+    ));
   }, [supabase]);
 
   const fetchAssignments = useCallback(async () => {
@@ -138,12 +192,7 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
 
   const judgeNames = useMemo(() => new Map(judges.map((judge) => [judge.id, judge.name])), [judges]);
 
-  // Prove senza batterie (melocotogno, finale): un'unica "batteria" 1.
-  const heatNumbers = useMemo(() => {
-    if (game === 'melocotogno' || game === 'finale') return [1];
-    return Array.from(new Set(heats.filter((heat) => heat.game === game).map((heat) => heat.heat_number)))
-      .sort((a, b) => a - b);
-  }, [game, heats]);
+  const heatNumbers = useMemo(() => getHeatNumbers(heats, game), [game, heats]);
 
   const judgeRoles = getJudgeRoles(game);
   const gameAssignments = useMemo(() => assignments.filter((a) => a.game === game), [assignments, game]);
@@ -175,7 +224,7 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
         .filter((a) => a.heat_number === heatNumber && a.judge_id !== keepJudgeId)
         .map((a) => a.judge_id)
     );
-    return judges.filter((judge) => !taken.has(judge.id) && !(judge.contrada_id && participants.has(judge.contrada_id)));
+    return judges.filter((judge) => !taken.has(judge.id) && !judge.contrada_ids.some((id) => participants.has(id)));
   }
 
   async function run(action: () => PromiseLike<{ error: { message: string } | null }>, errorLabel: string) {
@@ -191,16 +240,31 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
     e.preventDefault();
     const name = newJudgeName.trim();
     if (!name) return;
-    const contradaId = newJudgeContradaId || null;
-    if (await run(() => supabase.from('palio_judges').insert({ contrada_id: contradaId, name }), 'Errore inserimento giudice')) {
-      setNewJudgeName('');
-      setNewJudgeContradaId('');
-      await fetchJudges();
+    const inserted = await supabase
+      .from('palio_judges')
+      .insert({ name, preferred_role: newJudgePreference || null })
+      .select('id')
+      .single();
+    if (inserted.error) {
+      setMessage(`Errore inserimento giudice: ${inserted.error.message}`);
+      return;
     }
+    const linked = newJudgeContradaIds.length === 0 || await run(
+      () => supabase.from('palio_judge_contrade').insert(
+        newJudgeContradaIds.map((contradaId) => ({ contrada_id: contradaId, judge_id: inserted.data.id }))
+      ),
+      'Giudice inserito, ma Contrade non salvate'
+    );
+    if (linked) {
+      setNewJudgeName('');
+      setNewJudgeContradaIds([]);
+      setNewJudgePreference('');
+    }
+    await fetchJudges();
   }
 
-  async function handleSetJudgeContrada(judge: Judge, contradaId: string) {
-    const conflicts = contradaId
+  async function handleToggleJudgeContrada(judge: Judge, contradaId: string, checked: boolean) {
+    const conflicts = checked
       ? assignments.filter((a) => a.judge_id === judge.id && getParticipantContradaIds(a.game, a.heat_number).has(contradaId))
       : [];
     if (conflicts.length > 0) {
@@ -209,11 +273,75 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
       if (!window.confirm(warning)) return;
     }
     const ok = await run(async () => {
-      const update = await supabase.from('palio_judges').update({ contrada_id: contradaId || null }).eq('id', judge.id);
-      if (update.error || conflicts.length === 0) return update;
+      const link = checked
+        ? await supabase.from('palio_judge_contrade').insert({ contrada_id: contradaId, judge_id: judge.id })
+        : await supabase.from('palio_judge_contrade').delete().eq('judge_id', judge.id).eq('contrada_id', contradaId);
+      if (link.error || conflicts.length === 0) return link;
       return supabase.from('palio_judge_assignments').delete().in('id', conflicts.map((a) => a.id));
     }, 'Errore salvataggio Contrada');
     if (ok) await Promise.all([fetchJudges(), fetchAssignments()]);
+  }
+
+  async function handleSetJudgePreference(judge: Judge, preference: string) {
+    if (await run(
+      () => supabase.from('palio_judges').update({ preferred_role: preference || null }).eq('id', judge.id),
+      'Errore salvataggio preferenza'
+    )) {
+      await fetchJudges();
+    }
+  }
+
+  // Riempie solo i posti titolari ancora vuoti (non tocca gli abbinamenti già
+  // fatti). Per ogni posto sceglie tra i giudici liberi in quella batteria e
+  // senza conflitto di Contrada: prima chi ha la preferenza giusta, poi gli
+  // indifferenti, infine chi preferirebbe l'altro ruolo; a parità, chi ha
+  // meno incarichi nell'edizione.
+  async function handleAutoAssign() {
+    if (!editionId) return;
+    const load = new Map(assignmentCounts);
+    const planned: { edition_id: string; game: PalioGame; heat_number: number; is_extra: false; judge_id: string; role: JudgeRole }[] = [];
+    let unfilled = 0;
+    let againstPreference = 0;
+
+    for (const g of availableGames) {
+      for (const heatNumber of getHeatNumbers(heats, g)) {
+        const taken = new Set(
+          assignments.filter((a) => a.game === g && (a.heat_number === heatNumber || a.heat_number === null)).map((a) => a.judge_id)
+        );
+        const participants = getParticipantContradaIds(g, heatNumber);
+        for (const role of getJudgeRoles(g)) {
+          if (assignments.some((a) => a.game === g && !a.is_extra && a.heat_number === heatNumber && a.role === role)) continue;
+          const category: JudgePreference = role === 'cronometrista' ? 'cronometrista' : 'giudice';
+          const rank = (judge: Judge) => (judge.preferred_role === category ? 0 : judge.preferred_role === null ? 1 : 2);
+          const [best] = judges
+            .filter((judge) => !taken.has(judge.id) && !judge.contrada_ids.some((id) => participants.has(id)))
+            .sort((a, b) => rank(a) - rank(b) || (load.get(a.id) ?? 0) - (load.get(b.id) ?? 0) || a.name.localeCompare(b.name, 'it'));
+          if (!best) {
+            unfilled += 1;
+            continue;
+          }
+          if (rank(best) === 2) againstPreference += 1;
+          taken.add(best.id);
+          load.set(best.id, (load.get(best.id) ?? 0) + 1);
+          planned.push({ edition_id: editionId, game: g, heat_number: heatNumber, is_extra: false, judge_id: best.id, role });
+        }
+      }
+    }
+
+    if (planned.length === 0) {
+      setMessage(unfilled > 0
+        ? `Nessun abbinamento possibile: ${unfilled} posti vuoti senza giudici disponibili.`
+        : 'Nessun posto vuoto da riempire.');
+      return;
+    }
+    if (await run(() => supabase.from('palio_judge_assignments').insert(planned), 'Errore abbinamento automatico')) {
+      const notes = [
+        unfilled > 0 ? `${unfilled} posti rimasti vuoti (giudici insufficienti o in conflitto)` : '',
+        againstPreference > 0 ? `${againstPreference} contro la preferenza` : '',
+      ].filter(Boolean);
+      setMessage(`Abbinati ${planned.length} incarichi${notes.length ? `; ${notes.join('; ')}` : ''}.`);
+      await fetchAssignments();
+    }
   }
 
   async function handleDeleteJudge(judge: Judge) {
@@ -300,7 +428,7 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
       <div className="rounded-lg border border-stone-800 bg-stone-900 p-4">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-stone-300">Elenco giudici</h2>
         <p className="mt-1 text-xs text-stone-500">
-          L&apos;elenco è valido per tutte le edizioni. Puoi inserirne più del necessario: quelli non abbinati restano a disposizione. Se abbini un giudice a una Contrada, non potrà mai avere incarichi nelle prove in cui gareggia quella Contrada.
+          L&apos;elenco è valido per tutte le edizioni. Puoi inserirne più del necessario: quelli non abbinati restano a disposizione. Se abbini un giudice a una o più Contrade, non potrà mai avere incarichi nelle prove in cui gareggia una di quelle Contrade.
         </p>
         <form className="mt-3 flex flex-wrap items-end gap-3" onSubmit={handleAddJudge}>
           <label className="text-sm font-semibold text-stone-300">
@@ -313,16 +441,27 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
               value={newJudgeName}
             />
           </label>
+          <div className="text-sm font-semibold text-stone-300">
+            <span className="mb-1 block">Contrade</span>
+            <ContradaPicker
+              contrade={contrade}
+              disabled={busy}
+              label="Contrade del nuovo giudice"
+              onToggle={(contradaId, checked) =>
+                setNewJudgeContradaIds((ids) => checked ? [...ids, contradaId] : ids.filter((id) => id !== contradaId))}
+              selectedIds={newJudgeContradaIds}
+            />
+          </div>
           <label className="text-sm font-semibold text-stone-300">
-            Contrada
+            Preferenza
             <select
               className="ml-2 rounded-md border border-stone-700 bg-stone-800 px-3 py-1.5 text-sm text-stone-100"
-              onChange={(e) => setNewJudgeContradaId(e.target.value)}
-              value={newJudgeContradaId}
+              onChange={(e) => setNewJudgePreference(e.target.value)}
+              value={newJudgePreference}
             >
-              <option value="">Nessuna</option>
-              {contrade.map((contrada) => (
-                <option key={contrada.id} value={contrada.id}>{contrada.name}</option>
+              <option value="">Indifferente</option>
+              {(Object.keys(preferenceLabels) as JudgePreference[]).map((key) => (
+                <option key={key} value={key}>{preferenceLabels[key]}</option>
               ))}
             </select>
           </label>
@@ -352,16 +491,23 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
                       <span className="ml-2 text-xs text-stone-500">{assignmentCounts.get(judge.id) ?? 0} incarichi</span>
                     )}
                   </p>
+                  <ContradaPicker
+                    contrade={contrade}
+                    disabled={busy}
+                    label={`Contrade di ${judge.name}`}
+                    onToggle={(contradaId, checked) => handleToggleJudgeContrada(judge, contradaId, checked)}
+                    selectedIds={judge.contrada_ids}
+                  />
                   <select
-                    aria-label={`Contrada di ${judge.name}`}
+                    aria-label={`Preferenza di ${judge.name}`}
                     className="w-full rounded-md border border-stone-700 bg-stone-800 px-2 py-1 text-xs text-stone-200 disabled:opacity-50"
                     disabled={busy}
-                    onChange={(e) => handleSetJudgeContrada(judge, e.target.value)}
-                    value={judge.contrada_id ?? ''}
+                    onChange={(e) => handleSetJudgePreference(judge, e.target.value)}
+                    value={judge.preferred_role ?? ''}
                   >
-                    <option value="">Nessuna Contrada</option>
-                    {contrade.map((contrada) => (
-                      <option key={contrada.id} value={contrada.id}>{contrada.name}</option>
+                    <option value="">Indifferente</option>
+                    {(Object.keys(preferenceLabels) as JudgePreference[]).map((key) => (
+                      <option key={key} value={key}>{preferenceLabels[key]}</option>
                     ))}
                   </select>
                 </div>
@@ -388,6 +534,20 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
           </p>
         ) : (
           <>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <button
+                className="inline-flex items-center gap-1.5 rounded-md bg-palio-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-palio-600 disabled:opacity-50"
+                disabled={busy || judges.length === 0}
+                onClick={handleAutoAssign}
+                type="button"
+              >
+                <Wand2 className="h-4 w-4" />
+                Abbina automaticamente
+              </button>
+              <p className="text-xs text-stone-500">
+                Riempie solo i posti titolari vuoti di tutti i giochi, rispettando preferenze e Contrade; gli abbinamenti già fatti restano.
+              </p>
+            </div>
             <div className="mt-3 flex flex-wrap gap-2" role="tablist">
               {availableGames.map((g) => (
                 <button

@@ -73,8 +73,20 @@ create policy "palio_judges_manage" on public.palio_judges
 create policy "palio_judge_assignments_manage" on public.palio_judge_assignments
   for all using (public.can_manage_palio_games()) with check (public.can_manage_palio_games());
 
--- Contrada di appartenenza (opzionale): un giudice abbinato a una Contrada non
--- può mai avere un incarico (in nessun ruolo) nelle batterie in cui gareggia
--- quella Contrada. Il vincolo è applicato dalla Gestione.
+-- Contrade abbinate al giudice (zero o più): un giudice abbinato a una Contrada
+-- non può mai avere un incarico (in nessun ruolo) nelle batterie in cui
+-- gareggia quella Contrada. Il vincolo è applicato dalla Gestione.
+create table if not exists public.palio_judge_contrade (
+  judge_id uuid not null references public.palio_judges(id) on delete cascade,
+  contrada_id uuid not null references public.contrade(id) on delete cascade,
+  primary key (judge_id, contrada_id)
+);
+
+alter table public.palio_judge_contrade enable row level security;
+create policy "palio_judge_contrade_manage" on public.palio_judge_contrade
+  for all using (public.can_manage_palio_games()) with check (public.can_manage_palio_games());
+
+-- Preferenza del giudice tra cronometrista e giudice (qualsiasi ruolo di
+-- giudizio); null = indifferente. Usata dall'abbinamento automatico.
 alter table public.palio_judges
-  add column if not exists contrada_id uuid references public.contrade(id) on delete set null;
+  add column if not exists preferred_role text check (preferred_role is null or preferred_role in ('cronometrista', 'giudice'));
