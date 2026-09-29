@@ -49,9 +49,9 @@ const TABLE_X = 30;
 const TABLE_WIDTH = PAGE_WIDTH - TABLE_X * 2;
 const NAME_COLUMN_WIDTH = 46;
 
-type PdfDoc = InstanceType<typeof import('jspdf').jsPDF>;
+export type PdfDoc = InstanceType<typeof import('jspdf').jsPDF>;
 
-function getEditionHeader(input: JudgeSheetsInput): [string, string] {
+export function getEditionHeader(input: JudgeSheetsInput): [string, string] {
   const monthYear = `${input.edition.month} ${input.edition.year}`.toUpperCase();
   return [`VIGEVANO ${monthYear}`, input.liveTitle.trim().toUpperCase()];
 }
@@ -76,7 +76,7 @@ function buildLanes(heats: PalioEditionHeat[], contrade: Contrada[], game: Palio
   return Array.from(byLane.values()).sort((a, b) => a.laneNumber - b.laneNumber);
 }
 
-function drawPageHeader(doc: PdfDoc, headerLines: [string, string]) {
+export function drawPageHeader(doc: PdfDoc, headerLines: [string, string]) {
   doc.setFont('times', 'bold');
   doc.setFontSize(20);
   doc.setTextColor(197, 40, 15);
@@ -226,12 +226,12 @@ function drawSummaryPage(doc: PdfDoc, input: JudgeSheetsInput, games: PalioGame[
   });
 }
 
-async function createDoc(): Promise<PdfDoc> {
+export async function createDoc(): Promise<PdfDoc> {
   const { jsPDF } = await import('jspdf');
   return new jsPDF({ format: 'a4', orientation: 'portrait', unit: 'mm' });
 }
 
-const fileSlug = (edition: PalioEdition) => `${edition.year}-${edition.month}`;
+export const fileSlug = (edition: PalioEdition) => `${edition.year}-${edition.month}`;
 
 /**
  * PDF con: riepilogo di tutti i giochi/corsie (prima pagina) e, per ogni gioco

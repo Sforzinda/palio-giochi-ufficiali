@@ -15,6 +15,7 @@ import {
   palioGameLabels as liveGameLabels,
 } from '../hooks/usePalioLiveData';
 import { downloadFinaleSheetsPdf, downloadJudgeSheetsPdf } from '../lib/palio-judge-sheets';
+import { downloadResultsPdf, type PalioResultsPdfResult } from '../lib/palio-results-pdf';
 import {
   type PalioEditionResultInput,
   calculatePalioRows,
@@ -139,6 +140,7 @@ function PalioResultsInputContent() {
   const [statusMessage, setStatusMessage] = useState('');
   const [heatsStatusMessage, setHeatsStatusMessage] = useState('');
   const [generatingSheets, setGeneratingSheets] = useState<'giudici' | 'finale' | null>(null);
+  const [generatingResultsPdf, setGeneratingResultsPdf] = useState(false);
   const [activeSection, setActiveSection] = useState<'estrazioni' | 'giochi' | 'auspici' | 'utenti'>('estrazioni');
   const { isAdmin } = usePalioAuth();
   const [resultsSortMode, setResultsSortMode] = useState<'alfabetico' | 'batteria' | 'corsia'>('alfabetico');
@@ -274,6 +276,38 @@ function PalioResultsInputContent() {
       setRegiaStatusMessage('Errore nella generazione del PDF delle schede');
     } finally {
       setGeneratingSheets(null);
+    }
+  };
+
+  // Il PDF dei risultati si abilita quando il Palio ha un vincitore: la
+  // Triplice Tenzone decretata a ottobre; a maggio (senza finale) quando ci
+  // sono risultati inseriti.
+  const canDownloadResults = currentMonth === 'ottobre'
+    ? !!selectedLiveControl?.triplice_winner_contrada_id
+    : editionResults.length > 0;
+
+  const handleDownloadResults = async () => {
+    if (!selectedEdition) return;
+    setGeneratingResultsPdf(true);
+    try {
+      const { data, error } = await supabase
+        .from('palio_edition_results')
+        .select('contrada_id, game, position, points, notes, time_seconds, penalty_count, adjusted_time_seconds, is_disqualified, melocotogno_2_count, melocotogno_5_count, melocotogno_10_count')
+        .eq('edition_id', selectedEdition.id);
+      if (error) throw error;
+      await downloadResultsPdf({
+        contrade,
+        edition: selectedEdition,
+        heats,
+        liveTitle: selectedLiveControl?.live_title?.trim() || formatPalioEditionLabel(selectedEdition),
+        results: (data ?? []) as PalioResultsPdfResult[],
+        winnerContradaId: selectedLiveControl?.triplice_winner_contrada_id ?? null,
+      });
+    } catch (error) {
+      console.error('Error generating results PDF:', error);
+      setStatusMessage('Errore nella generazione del PDF dei risultati');
+    } finally {
+      setGeneratingResultsPdf(false);
     }
   };
 
@@ -1467,6 +1501,23 @@ function PalioResultsInputContent() {
                 </button>
               </form>
             )}
+          </div>
+
+          <div className="rounded-lg border border-stone-800 bg-stone-900 p-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-stone-300">Stampa risultati</h2>
+            <p className="mt-1 text-sm text-stone-500">
+              PDF con i risultati di ogni prova (batterie, tempi, penalità, punti e note), la finale e la classifica.
+              Disponibile una volta decretato il vincitore del Palio.
+            </p>
+            <button
+              type="button"
+              disabled={!selectedEdition || !canDownloadResults || generatingResultsPdf}
+              onClick={handleDownloadResults}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              <Download className="h-4 w-4" />
+              {generatingResultsPdf ? 'Generazione...' : 'Scarica risultati PDF'}
+            </button>
           </div>
 
           <div>
