@@ -37,6 +37,12 @@ import {
 // stessa RLS (can_manage_palio_games()). Non chiama mai il ricalcolo dei punteggi
 // Fanta: quello resta esclusivo dell'Admin del Fanta.
 
+// Corsie per batteria proposte di default nelle estrazioni (contrade per
+// batteria): carriola e torre su tre corsie, cerchio su due. Il valore resta
+// sempre modificabile per ogni gioco.
+const defaultHeatSizes: Partial<Record<PalioGame, number>> = { carriola: 3, cerchio: 2, torre: 3 };
+const getDefaultHeatSize = (game: PalioGame) => defaultHeatSizes[game] ?? 3;
+
 const emptyResultRow = (contradaId: string): PalioEditionResultInput => ({
   adjusted_time_seconds: '',
   contrada_id: contradaId,
@@ -128,7 +134,10 @@ function PalioResultsInputContent() {
   const [editionResults, setEditionResults] = useState<{ contrada_id: string; game: PalioGame; points: number | string | null }[]>([]);
   const [heats, setHeats] = useState<PalioEditionHeat[]>([]);
   const [heatGame, setHeatGame] = useState<PalioGame>('corsa');
-  const [heatSize, setHeatSize] = useState('3');
+  // Contrade (= corsie) per batteria: proposta per gioco, modificabile.
+  const [heatSizeByGame, setHeatSizeByGame] = useState<Partial<Record<PalioGame, string>>>({});
+  const heatSize = heatSizeByGame[heatGame] ?? String(getDefaultHeatSize(heatGame));
+  const setHeatSize = (value: string) => setHeatSizeByGame((current) => ({ ...current, [heatGame]: value }));
   const [liveControls, setLiveControls] = useState<PalioLiveControl[]>([]);
   const [liveTitleInput, setLiveTitleInput] = useState('');
   const [tripliceWinnerId, setTripliceWinnerId] = useState('');
@@ -1421,6 +1430,7 @@ function PalioResultsInputContent() {
                     onChange={(e) => setHeatSize(e.target.value)}
                     className="ml-2 w-20 rounded-md border border-stone-700 bg-stone-800 px-3 py-1.5 text-sm text-stone-100"
                   />
+                  <span className="ml-2 text-xs font-normal text-stone-500">Predefinito per {liveGameLabels[heatGame]}: {getDefaultHeatSize(heatGame)}</span>
                 </label>
                 <button
                   type="button"
