@@ -487,7 +487,11 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
   // possibile) e infine chi ha meno incarichi.
   async function handleAutoAssign() {
     if (!editionId) return;
-    const load = new Map(assignmentCounts);
+    // Carico di lavoro per bilanciare gli incarichi. Il cronometrista del
+    // melocotogno non conta: è solo qualcuno accanto al presentatore con un
+    // cronometro, mentre tutti gli altri giudici sono comunque impegnati.
+    const load = new Map<string, number>();
+    assignments.filter((a) => a.game !== 'melocotogno').forEach((a) => load.set(a.judge_id, (load.get(a.judge_id) ?? 0) + 1));
     const lockedLane = new Map<string, number>();
     assignments.forEach((a) => {
       const key = `${a.game}|${a.judge_id}`;
@@ -495,8 +499,8 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
     });
     const planned: { edition_id: string; game: PalioGame; heat_number: number; is_extra: false; judge_id: string; lane: number; role: JudgeRole }[] = [];
     const missing: string[] = [];
-    let againstPreference = 0;
-    let laneChanges = 0;
+    const laneChangeDetails: string[] = [];
+    const againstPreferenceDetails: string[] = [];
 
     // La finale non ha abbinamento automatico e non viene segnalata.
     const autoGames = availableGames.filter((g) => g !== 'finale');
@@ -540,10 +544,20 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
             return;
           }
           const judge = judges[judgeIndex];
-          if (laneRank(judge, lane) === 2) laneChanges += 1;
-          if (preferenceRank(judge, role) === 2) againstPreference += 1;
+          const where = `${palioGameLabels[g]} batt. ${heatNumber} corsia ${lane}`;
+          if (laneRank(judge, lane) === 2) {
+            const usualLane = lockedLane.get(`${g}|${judge.id}`) as number;
+            const blockedBy = hasLaneConflict(judge, g, heatNumber, usualLane)
+              ? contradaNames.get(getLaneContradaId(g, heatNumber, usualLane) ?? '') ?? 'una sua Contrada'
+              : null;
+            laneChangeDetails.push(`${judge.name} (${where}: di solito corsia ${usualLane}, ${blockedBy ? `in quella corsia gareggia ${blockedBy}, sua Contrada` : 'spostato per coprire tutti i posti'})`);
+          }
+          if (preferenceRank(judge, role) === 2) {
+            const wanted = judge.preferred_role === 'giudice' ? 'il giudice' : 'il cronometrista';
+            againstPreferenceDetails.push(`${judge.name} come ${roleLabels[role].toLowerCase()} (${where}: preferisce fare ${wanted}, ma serviva per coprire il posto)`);
+          }
           if (!lockedLane.has(`${g}|${judge.id}`)) lockedLane.set(`${g}|${judge.id}`, lane);
-          load.set(judge.id, (load.get(judge.id) ?? 0) + 1);
+          if (g !== 'melocotogno') load.set(judge.id, (load.get(judge.id) ?? 0) + 1);
           planned.push({ edition_id: editionId, game: g, heat_number: heatNumber, is_extra: false, judge_id: judge.id, lane, role });
         });
       }
@@ -626,11 +640,13 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
       }
     }
 
+    const listItems = (items: string[], max = 8) =>
+      items.slice(0, max).map((item) => `  • ${item}`).join('\n') + (items.length > max ? `\n  • …e altri ${items.length - max}` : '');
     const missingNote = missing.length > 0
-      ? `${missing.length} posti rimasti vuoti (mancano giudici disponibili o senza conflitti): ${missing.slice(0, 5).join('; ')}${missing.length > 5 ? '…' : ''}`
+      ? `Posti rimasti vuoti (${missing.length}), mancano giudici disponibili o senza conflitto di Contrada:\n${listItems(missing)}`
       : '';
     if (planned.length === 0 && plannedExtras.length === 0 && !gonnaJudge) {
-      setMessage(missingNote ? `Nessun abbinamento possibile: ${missingNote}.` : 'Nessun posto vuoto da riempire.');
+      setMessage(missingNote ? `Nessun abbinamento possibile.\n${missingNote}` : 'Nessun posto vuoto da riempire.');
       return;
     }
     if (await run(async () => {
@@ -641,16 +657,27 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
       if (!gonnaJudge) return { error: null };
       return supabase.from('palio_judge_fixed').insert({ edition_id: editionId, judge_id: gonnaJudge.id, role: 'gonna' });
     }, 'Errore abbinamento automatico')) {
-      const notes = [
+      const extraCountByJudge = new Map<string, number>();
+      plannedExtras.forEach((extra) => extraCountByJudge.set(extra.judge_id, (extraCountByJudge.get(extra.judge_id) ?? 0) + 1));
+      const extraSummary = Array.from(extraCountByJudge.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([judgeId, count]) => `${judgeNames.get(judgeId) ?? 'Giudice'} (${count})`)
+        .join(', ');
+      const lines = [
+        `Abbinati ${planned.length} incarichi titolari (cronometristi e giudici penalità nelle corsie).`,
+        plannedExtras.length > 0
+          ? `Assegnati ${plannedExtras.length} extra ai giudici rimasti senza lavoro in una batteria (tra parentesi, in quante batterie): ${extraSummary}.`
+          : '',
+        laneChangeDetails.length > 0
+          ? `Hanno dovuto cambiare corsia nello stesso gioco (${laneChangeDetails.length}):\n${listItems(laneChangeDetails)}`
+          : '',
+        againstPreferenceDetails.length > 0
+          ? `Assegnati contro la preferenza (${againstPreferenceDetails.length}):\n${listItems(againstPreferenceDetails)}`
+          : '',
+        gonnaJudge ? `${gonnaJudge.name} designato giudice della gonna (giudici in abbondanza).` : '',
         missingNote,
-        laneChanges > 0 ? `${laneChanges} giudici hanno dovuto cambiare corsia` : '',
-        againstPreference > 0 ? `${againstPreference} contro la preferenza` : '',
       ].filter(Boolean);
-      const extraNote = [
-        plannedExtras.length > 0 ? ` e ${plannedExtras.length} extra per i giudici senza lavoro` : '',
-        gonnaJudge ? `; ${gonnaJudge.name} designato giudice della gonna (giudici in abbondanza)` : '',
-      ].join('');
-      setMessage(`Abbinati ${planned.length} incarichi${extraNote}${notes.length ? `; ${notes.join('; ')}` : ''}.`);
+      setMessage(lines.join('\n'));
       await Promise.all([fetchAssignments(), fetchFixed()]);
     }
   }
@@ -853,7 +880,7 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
             Aggiungi giudice
           </button>
         </form>
-        {message && <p className="mt-3 text-sm font-semibold text-amber-300">{message}</p>}
+        {message && <p className="mt-3 whitespace-pre-line text-sm font-semibold text-amber-300">{message}</p>}
         {judges.length === 0 ? (
           <p className="mt-4 text-sm text-stone-400">Nessun giudice inserito.</p>
         ) : (
