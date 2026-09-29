@@ -63,9 +63,13 @@ function getLaneNumbers(heats: PalioEditionHeat[], game: PalioGame, heatNumber: 
 
 const baseJudgeRoles: JudgeRole[] = ['cronometrista', 'giudice'];
 
-// Giudice di campo e giudice della gonna esistono solo nel cerchio.
-const getJudgeRoles = (game: PalioGame): JudgeRole[] =>
-  game === 'cerchio' ? [...baseJudgeRoles, 'giudice_campo', 'giudice_gonna'] : baseJudgeRoles;
+// Giudice di campo e giudice della gonna esistono solo nel cerchio; il
+// melocotogno non ha il giudice delle penalità.
+const getJudgeRoles = (game: PalioGame): JudgeRole[] => {
+  if (game === 'cerchio') return [...baseJudgeRoles, 'giudice_campo', 'giudice_gonna'];
+  if (game === 'melocotogno') return baseJudgeRoles.filter((role) => role !== 'giudice');
+  return baseJudgeRoles;
+};
 
 const roleLabels: Record<JudgeRole, string> = {
   cronometrista: 'Cronometrista',
@@ -445,6 +449,35 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
     if (ok) await fetchAssignments();
   }
 
+  // Elimina gli abbinamenti di una batteria, di un gioco o (senza scope)
+  // dell'intera edizione, figure fisse comprese. Gli extra valgono nello
+  // stesso ambito: quelli "per tutto il gioco" saltano solo da gioco in su.
+  async function handleClear(label: string, scope: { game?: PalioGame; heatNumber?: number } = {}) {
+    if (!editionId) return;
+    const inScope = assignments.filter(
+      (a) => (!scope.game || a.game === scope.game) && (scope.heatNumber === undefined || a.heat_number === scope.heatNumber)
+    );
+    const includeFixed = !scope.game;
+    const total = inScope.length + (includeFixed ? fixedAssignments.length : 0);
+    if (total === 0) {
+      setMessage('Nessun abbinamento da eliminare.');
+      return;
+    }
+    if (!window.confirm(`Eliminare ${total} abbinamenti: ${label}? L'operazione non si può annullare.`)) return;
+    const ok = await run(async () => {
+      let query = supabase.from('palio_judge_assignments').delete().eq('edition_id', editionId);
+      if (scope.game) query = query.eq('game', scope.game);
+      if (scope.heatNumber !== undefined) query = query.eq('heat_number', scope.heatNumber);
+      const result = await query;
+      if (result.error || !includeFixed) return result;
+      return supabase.from('palio_judge_fixed').delete().eq('edition_id', editionId);
+    }, 'Errore eliminazione abbinamenti');
+    if (ok) {
+      await Promise.all([fetchAssignments(), fetchFixed()]);
+      setMessage(`Eliminati ${total} abbinamenti.`);
+    }
+  }
+
   // Vecchi abbinamenti titolari fatti per batteria, senza corsia.
   const legacyAssignments = useMemo(() => assignments.filter((a) => !a.is_extra && a.lane === null), [assignments]);
 
@@ -708,6 +741,24 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
                 <Wand2 className="h-4 w-4" />
                 Abbina automaticamente
               </button>
+              <button
+                className="inline-flex items-center gap-1.5 rounded-md border border-stone-600 px-3 py-1.5 text-sm font-semibold text-stone-200 hover:border-red-500 hover:text-red-300 disabled:opacity-50"
+                disabled={busy || gameAssignments.length === 0}
+                onClick={() => handleClear(`tutti quelli di ${palioGameLabels[game]}`, { game })}
+                type="button"
+              >
+                <Trash2 className="h-4 w-4" />
+                Elimina abbinamenti {palioGameLabels[game]}
+              </button>
+              <button
+                className="inline-flex items-center gap-1.5 rounded-md border border-red-800 px-3 py-1.5 text-sm font-semibold text-red-300 hover:border-red-500 disabled:opacity-50"
+                disabled={busy || assignments.length + fixedAssignments.length === 0}
+                onClick={() => handleClear('tutti quelli dell\'edizione, figure fisse comprese')}
+                type="button"
+              >
+                <Trash2 className="h-4 w-4" />
+                Elimina tutti gli abbinamenti
+              </button>
               {legacyAssignments.length > 0 && (
                 <button
                   className="inline-flex items-center gap-1.5 rounded-md border border-amber-700 px-3 py-1.5 text-sm font-semibold text-amber-200 hover:border-amber-400 disabled:opacity-50"
@@ -750,9 +801,20 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 {heatNumbers.map((heatNumber) => (
                   <div key={heatNumber} className="space-y-3 rounded-md border border-stone-800 bg-stone-950 p-3">
-                    <h3 className="text-sm font-semibold text-stone-100">
-                      {game === 'melocotogno' || game === 'finale' ? `${palioGameLabels[game]} (prova unica)` : `Batteria ${heatNumber}`}
-                    </h3>
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="text-sm font-semibold text-stone-100">
+                        {game === 'melocotogno' || game === 'finale' ? `${palioGameLabels[game]} (prova unica)` : `Batteria ${heatNumber}`}
+                      </h3>
+                      <button
+                        className="inline-flex items-center gap-1 rounded-md border border-stone-700 px-2 py-1 text-xs font-semibold text-stone-300 hover:border-red-500 hover:text-red-300 disabled:opacity-50"
+                        disabled={busy || !gameAssignments.some((a) => a.heat_number === heatNumber)}
+                        onClick={() => handleClear(`${palioGameLabels[game]}, batteria ${heatNumber}`, { game, heatNumber })}
+                        type="button"
+                      >
+                        <Trash2 aria-hidden="true" className="h-3 w-3" />
+                        Svuota
+                      </button>
+                    </div>
                     {getLaneNumbers(heats, game, heatNumber).map((lane) => (
                       <div key={lane} className="space-y-2 rounded-md border border-stone-800 bg-stone-900/60 p-2">
                         <p className="text-xs font-semibold uppercase tracking-wide text-palio-300">Corsia {lane}</p>
