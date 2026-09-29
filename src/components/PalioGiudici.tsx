@@ -480,10 +480,11 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
   // fatti): l'obiettivo è coprire tutte le corsie con tutti i ruoli. Per ogni
   // batteria risolve un'assegnazione a costo minimo tra posti (corsia x ruolo)
   // e giudici, escludendo chi è già in quella batteria, è figura fissa o ha una
-  // Contrada che gareggia lì. Prima si massimizzano i posti coperti, poi si
-  // preferisce: chi resta sulla stessa corsia nello stesso gioco (un giudice non cambia corsia,
-  // se possibile) o non ne ha ancora una, poi la preferenza (giusta,
-  // indifferente, opposta) e, a parità, chi ha meno incarichi.
+  // Contrada che gareggia lì. Prima si massimizzano i posti coperti, poi
+  // hanno la precedenza i giudici che hanno espresso la preferenza per quel
+  // ruolo (poi gli indifferenti, infine chi preferirebbe l'altro); a parità
+  // conta la corsia (un giudice non cambia corsia nello stesso gioco, se
+  // possibile) e infine chi ha meno incarichi.
   async function handleAutoAssign() {
     if (!editionId) return;
     const load = new Map(assignmentCounts);
@@ -528,7 +529,7 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
         const cost = slots.map(({ lane, role }) => judges.map((judge, index) =>
           taken.has(judge.id) || fixedJudgeIds.has(judge.id) || hasLaneConflict(judge, g, heatNumber, lane)
             ? UNAVAILABLE_COST
-            : laneRank(judge, lane) * 10000 + preferenceRank(judge, role) * 1000 + Math.min(load.get(judge.id) ?? 0, 99) * 10 + index / 1000
+            : preferenceRank(judge, role) * 100000 + laneRank(judge, lane) * 1000 + Math.min(load.get(judge.id) ?? 0, 99) * 10 + index / 1000
         ));
         const matching = solveAssignment(cost);
 
