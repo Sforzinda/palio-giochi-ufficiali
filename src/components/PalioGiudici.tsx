@@ -499,6 +499,8 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
 
     // La finale non ha abbinamento automatico e non viene segnalata.
     const autoGames = availableGames.filter((g) => g !== 'finale');
+    // Il melocotogno ha un solo cronometrista: niente extra.
+    const extraGames = autoGames.filter((g) => g !== 'melocotogno');
     for (const g of autoGames) {
       for (const heatNumber of getHeatNumbers(heats, g)) {
           const taken = new Set([
@@ -571,7 +573,7 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
       plannedExtras.push({ edition_id: editionId, game: g, heat_number: heatNumber, is_extra: true, judge_id: judge.id, lane: null, role });
     };
 
-    for (const g of autoGames) {
+    for (const g of extraGames) {
       for (const heatNumber of getHeatNumbers(heats, g)) {
         for (const role of extrasRoles(g).filter((r) => r === 'cronometrista' || r === 'giudice')) {
           const alreadyThere = assignments.some((a) => a.game === g && a.is_extra && a.heat_number === heatNumber && a.role === role)
@@ -597,7 +599,7 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
         .sort((a, b) => Number(a.preferred_role !== null) - Number(b.preferred_role !== null));
     }
 
-    for (const g of autoGames) {
+    for (const g of extraGames) {
       const roles = extrasRoles(g);
       for (const heatNumber of getHeatNumbers(heats, g)) {
         const extraCounts = new Map<JudgeRole, number>(roles.map((role) => [
@@ -708,8 +710,9 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
 
   // Abbinamenti titolari vecchi: senza corsia, oppure con un ruolo che nel gioco
   // non è più previsto (es. giudice della gonna per corsia, ora figura fissa).
+  // Sono vecchi anche gli extra del melocotogno, che non li prevede.
   const isLegacyAssignment = (a: JudgeAssignment) =>
-    !a.is_extra && (a.lane === null || !getJudgeRoles(a.game).includes(a.role));
+    a.is_extra ? a.game === 'melocotogno' : a.lane === null || !getJudgeRoles(a.game).includes(a.role);
   const legacyAssignments = useMemo(() => assignments.filter(isLegacyAssignment), [assignments]);
 
   async function handleRemoveLegacy() {
@@ -1110,7 +1113,7 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
                             .filter((a) => a.heat_number === heatNumber && isLegacyAssignment(a))
                             .map((a) => (
                               <li key={a.id} className="flex items-center justify-between gap-2">
-                                <span>{roleLabels[a.role]}: {judgeNames.get(a.judge_id) ?? 'Giudice'}</span>
+                                <span>{(a.is_extra ? extraRoleLabels : roleLabels)[a.role]}: {judgeNames.get(a.judge_id) ?? 'Giudice'}</span>
                                 <button
                                   aria-label={`Rimuovi ${judgeNames.get(a.judge_id) ?? 'giudice'} come ${roleLabels[a.role].toLowerCase()} senza corsia`}
                                   className="rounded p-1 hover:bg-stone-800 hover:text-red-400 disabled:opacity-50"
@@ -1125,20 +1128,24 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
                         </ul>
                       </div>
                     )}
-                    <div>
-                      <p className="mb-1 text-xs font-semibold text-stone-400">Extra per questa batteria</p>
-                      {renderExtras(heatNumber)}
-                    </div>
+                    {game !== 'melocotogno' && (
+                      <div>
+                        <p className="mb-1 text-xs font-semibold text-stone-400">Extra per questa batteria</p>
+                        {renderExtras(heatNumber)}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             )}
 
-            <div className="mt-4 rounded-md border border-stone-800 bg-stone-950 p-3">
-              <h3 className="text-sm font-semibold text-stone-100">Extra per tutto il gioco: {palioGameLabels[game]}</h3>
-              <p className="mb-2 text-xs text-stone-500">Disponibili per ogni batteria di questo gioco.</p>
-              {renderExtras(null)}
-            </div>
+            {game !== 'melocotogno' && (
+              <div className="mt-4 rounded-md border border-stone-800 bg-stone-950 p-3">
+                <h3 className="text-sm font-semibold text-stone-100">Extra per tutto il gioco: {palioGameLabels[game]}</h3>
+                <p className="mb-2 text-xs text-stone-500">Disponibili per ogni batteria di questo gioco.</p>
+                {renderExtras(null)}
+              </div>
+            )}
           </>
         )}
       </div>

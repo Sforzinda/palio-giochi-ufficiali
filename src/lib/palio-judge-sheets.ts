@@ -4,10 +4,20 @@ import type { Contrada, PalioEdition, PalioEditionHeat, PalioGame } from '../hoo
 // scheda riepilogativa e delle schede della finale. jsPDF è caricato in modo
 // dinamico: pesa solo quando si scarica il PDF.
 
+/** Titolare abbinato a una corsia di una batteria (cronometrista o giudice delle penalità). */
+export interface JudgeSheetAssignment {
+  game: PalioGame;
+  heatNumber: number;
+  judgeName: string;
+  lane: number;
+  role: string;
+}
+
 interface JudgeSheetsInput {
   contrade: Contrada[];
   edition: PalioEdition;
   heats: PalioEditionHeat[];
+  judgeAssignments?: JudgeSheetAssignment[];
   liveTitle: string;
 }
 
@@ -48,6 +58,8 @@ const PAGE_HEIGHT = 297;
 const TABLE_X = 30;
 const TABLE_WIDTH = PAGE_WIDTH - TABLE_X * 2;
 const NAME_COLUMN_WIDTH = 46;
+const JUDGE_NAME_FONT_SIZE = 10.5;
+const JUDGE_LINE_HEIGHT = 4.6;
 
 export type PdfDoc = InstanceType<typeof import('jspdf').jsPDF>;
 
@@ -76,6 +88,21 @@ function buildLanes(heats: PalioEditionHeat[], contrade: Contrada[], game: Palio
   return Array.from(byLane.values()).sort((a, b) => a.laneNumber - b.laneNumber);
 }
 
+// Nome del giudice titolare per la scheda: il cronometrista sulla scheda tempi,
+// il giudice delle penalità su quella penalità.
+function getJudgeName(
+  input: Pick<JudgeSheetsInput, 'judgeAssignments'>,
+  game: PalioGame,
+  heatNumber: number,
+  lane: number,
+  kind: SheetKind
+): string | undefined {
+  const role = kind === 'tempi' ? 'cronometrista' : 'giudice';
+  return input.judgeAssignments?.find(
+    (a) => a.game === game && a.heatNumber === heatNumber && a.lane === lane && a.role === role
+  )?.judgeName;
+}
+
 export function drawPageHeader(doc: PdfDoc, headerLines: [string, string]) {
   doc.setFont('times', 'bold');
   doc.setFontSize(20);
@@ -90,7 +117,7 @@ function drawJudgeSheet(
   headerLines: [string, string],
   title: string,
   kind: SheetKind,
-  rows: { label: string; noPlayers?: boolean }[]
+  rows: { judgeName?: string; label: string; noPlayers?: boolean }[]
 ) {
   drawPageHeader(doc, headerLines);
 
@@ -119,16 +146,26 @@ function drawJudgeSheet(
     doc.setFillColor(index % 2 === 0 ? 255 : 244, index % 2 === 0 ? 255 : 244, index % 2 === 0 ? 255 : 244);
     doc.rect(TABLE_X + NAME_COLUMN_WIDTH, y, TABLE_WIDTH - NAME_COLUMN_WIDTH, rowHeight, 'FD');
 
+    // Sotto la contrada: eventuale "senza giocatori" e il nome del giudice.
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(JUDGE_NAME_FONT_SIZE);
+    const judgeLines: string[] = row.judgeName ? doc.splitTextToSize(row.judgeName, NAME_COLUMN_WIDTH - 6).slice(0, 2) : [];
+    const bottomReserve = (row.noPlayers ? 4 : 0) + judgeLines.length * JUDGE_LINE_HEIGHT + (judgeLines.length > 0 ? 1 : 0);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(13);
     const nameLines: string[] = doc.splitTextToSize(row.label, NAME_COLUMN_WIDTH - 6);
     const nameHeight = nameLines.length * 5.5;
-    doc.text(nameLines, TABLE_X + NAME_COLUMN_WIDTH / 2, y + (rowHeight - nameHeight) / 2 + 4, { align: 'center' });
+    doc.text(nameLines, TABLE_X + NAME_COLUMN_WIDTH / 2, y + (rowHeight - bottomReserve - nameHeight) / 2 + 4, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    const judgeTop = y + rowHeight - 3 - (judgeLines.length - 1) * JUDGE_LINE_HEIGHT;
     if (row.noPlayers) {
-      doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
-      doc.text('(senza giocatori)', TABLE_X + NAME_COLUMN_WIDTH / 2, y + rowHeight - 3, { align: 'center' });
+      doc.text('(senza giocatori)', TABLE_X + NAME_COLUMN_WIDTH / 2, judgeTop - JUDGE_LINE_HEIGHT - 1 + (judgeLines.length === 0 ? JUDGE_LINE_HEIGHT + 1 : 0), { align: 'center' });
     }
+    doc.setFontSize(JUDGE_NAME_FONT_SIZE);
+    judgeLines.forEach((line, lineIndex) => {
+      doc.text(line, TABLE_X + NAME_COLUMN_WIDTH / 2, judgeTop + lineIndex * JUDGE_LINE_HEIGHT, { align: 'center' });
+    });
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(12);
@@ -255,7 +292,11 @@ export async function downloadJudgeSheetsPdf(input: JudgeSheetsInput, games: Pal
           headerLines,
           `${gameSheetTitles[game]} - CORSIA ${lane.laneNumber}`,
           kind,
-          lane.rows.map((row) => ({ label: row.contradaName, noPlayers: row.noPlayers }))
+          lane.rows.map((row) => ({
+            judgeName: getJudgeName(input, game, row.heatNumber, lane.laneNumber, kind),
+            label: row.contradaName,
+            noPlayers: row.noPlayers,
+          }))
         );
       });
     });
@@ -272,7 +313,9 @@ export async function downloadFinaleSheetsPdf(input: Omit<JudgeSheetsInput, 'con
   (['tempi', 'penalita'] as SheetKind[]).forEach((kind, kindIndex) => {
     for (let lane = 1; lane <= FINALE_LANES; lane += 1) {
       if (kindIndex > 0 || lane > 1) doc.addPage();
-      drawJudgeSheet(doc, headerLines, `FINALE - CORSIA ${lane}`, kind, [{ label: '' }]);
+      drawJudgeSheet(doc, headerLines, `FINALE - CORSIA ${lane}`, kind, [
+        { judgeName: getJudgeName(input, 'finale', 1, lane, kind), label: '' },
+      ]);
     }
   });
 
