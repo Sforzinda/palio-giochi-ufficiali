@@ -5,6 +5,21 @@ import { type Contrada, type PalioEdition, type PalioEditionHeat, type PalioGame
 
 type JudgeRole = 'cronometrista' | 'giudice' | 'giudice_campo' | 'giudice_gonna' | 'giudice_fantapalio';
 
+type FixedRole = 'fantapalio' | 'banco';
+
+interface FixedAssignment {
+  id: string;
+  judge_id: string;
+  role: FixedRole;
+}
+
+const fixedRoles: FixedRole[] = ['fantapalio', 'banco'];
+
+const fixedRoleLabels: Record<FixedRole, string> = {
+  fantapalio: 'Giudice FantaPalio',
+  banco: 'Giudice del banco',
+};
+
 type JudgePreference = 'cronometrista' | 'giudice';
 
 interface Judge {
@@ -20,6 +35,7 @@ interface JudgeAssignment {
   id: string;
   is_extra: boolean;
   judge_id: string;
+  lane: number | null;
   role: JudgeRole;
 }
 
@@ -35,7 +51,17 @@ function getHeatNumbers(heats: PalioEditionHeat[], game: PalioGame): number[] {
     .sort((a, b) => a - b);
 }
 
-const baseJudgeRoles: JudgeRole[] = ['cronometrista', 'giudice', 'giudice_fantapalio'];
+// Corsie di una batteria (display_order delle estrazioni). La finale ha 3
+// corsie fisse, il melocotogno un'unica corsia.
+function getLaneNumbers(heats: PalioEditionHeat[], game: PalioGame, heatNumber: number): number[] {
+  if (game === 'melocotogno') return [1];
+  if (game === 'finale') return [1, 2, 3];
+  return Array.from(new Set(
+    heats.filter((heat) => heat.game === game && heat.heat_number === heatNumber).map((heat) => heat.display_order)
+  )).sort((a, b) => a - b);
+}
+
+const baseJudgeRoles: JudgeRole[] = ['cronometrista', 'giudice'];
 
 // Giudice di campo e giudice della gonna esistono solo nel cerchio.
 const getJudgeRoles = (game: PalioGame): JudgeRole[] =>
@@ -141,6 +167,7 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
   const supabase = useMemo(() => getSupabaseClient(), []);
   const [judges, setJudges] = useState<Judge[]>([]);
   const [assignments, setAssignments] = useState<JudgeAssignment[]>([]);
+  const [fixedAssignments, setFixedAssignments] = useState<FixedAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [newJudgeName, setNewJudgeName] = useState('');
@@ -173,7 +200,7 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
     }
     const { data, error } = await supabase
       .from('palio_judge_assignments')
-      .select('id, game, heat_number, judge_id, role, is_extra')
+      .select('id, game, heat_number, judge_id, role, is_extra, lane')
       .eq('edition_id', editionId);
     if (error) {
       setMessage(`Errore caricamento abbinamenti: ${error.message}`);
@@ -186,9 +213,26 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
     fetchJudges().finally(() => setLoading(false));
   }, [fetchJudges]);
 
+  const fetchFixed = useCallback(async () => {
+    if (!editionId) {
+      setFixedAssignments([]);
+      return;
+    }
+    const { data, error } = await supabase
+      .from('palio_judge_fixed')
+      .select('id, judge_id, role')
+      .eq('edition_id', editionId);
+    if (error) {
+      setMessage(`Errore caricamento figure fisse: ${error.message}`);
+      return;
+    }
+    setFixedAssignments((data as FixedAssignment[]) ?? []);
+  }, [editionId, supabase]);
+
   useEffect(() => {
     fetchAssignments();
-  }, [fetchAssignments]);
+    fetchFixed();
+  }, [fetchAssignments, fetchFixed]);
 
   const judgeNames = useMemo(() => new Map(judges.map((judge) => [judge.id, judge.name])), [judges]);
 
@@ -198,8 +242,20 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
   const gameAssignments = useMemo(() => assignments.filter((a) => a.game === game), [assignments, game]);
   const assignmentCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    assignments.forEach((a) => counts.set(a.judge_id, (counts.get(a.judge_id) ?? 0) + 1));
+    [...assignments, ...fixedAssignments].forEach((a) => counts.set(a.judge_id, (counts.get(a.judge_id) ?? 0) + 1));
     return counts;
+  }, [assignments, fixedAssignments]);
+  // Le figure fisse sono sempre al loro posto: non hanno incarichi di corsia.
+  const fixedJudgeIds = useMemo(() => new Set(fixedAssignments.map((a) => a.judge_id)), [fixedAssignments]);
+
+  // Corsie in cui ogni giudice ha già un incarico titolare nell'edizione.
+  const judgeLanes = useMemo(() => {
+    const lanes = new Map<string, Set<number>>();
+    assignments.forEach((a) => {
+      if (a.is_extra || a.lane === null) return;
+      lanes.set(a.judge_id, (lanes.get(a.judge_id) ?? new Set<number>()).add(a.lane));
+    });
+    return lanes;
   }, [assignments]);
 
   // Contrade che gareggiano in una batteria (o in tutto il gioco se heatNumber
@@ -224,7 +280,7 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
         .filter((a) => a.heat_number === heatNumber && a.judge_id !== keepJudgeId)
         .map((a) => a.judge_id)
     );
-    return judges.filter((judge) => !taken.has(judge.id) && !judge.contrada_ids.some((id) => participants.has(id)));
+    return judges.filter((judge) => !taken.has(judge.id) && !fixedJudgeIds.has(judge.id) && !judge.contrada_ids.some((id) => participants.has(id)));
   }
 
   async function run(action: () => PromiseLike<{ error: { message: string } | null }>, errorLabel: string) {
@@ -292,16 +348,23 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
   }
 
   // Riempie solo i posti titolari ancora vuoti (non tocca gli abbinamenti già
-  // fatti). Per ogni posto sceglie tra i giudici liberi in quella batteria e
-  // senza conflitto di Contrada: prima chi ha la preferenza giusta, poi gli
-  // indifferenti, infine chi preferirebbe l'altro ruolo; a parità, chi ha
-  // meno incarichi nell'edizione.
+  // fatti), corsia per corsia. Per ogni posto sceglie tra i giudici liberi in
+  // quella batteria e senza conflitto di Contrada. Ordine: prima chi è già
+  // stato assegnato a quella corsia (un giudice non cambia corsia, se
+  // possibile), poi chi non ha ancora una corsia, infine chi dovrebbe
+  // cambiarla; poi la preferenza (giusta, indifferente, opposta) e, a parità,
+  // chi ha meno incarichi nell'edizione.
   async function handleAutoAssign() {
     if (!editionId) return;
     const load = new Map(assignmentCounts);
-    const planned: { edition_id: string; game: PalioGame; heat_number: number; is_extra: false; judge_id: string; role: JudgeRole }[] = [];
+    const lockedLane = new Map<string, number>();
+    assignments.forEach((a) => {
+      if (!a.is_extra && a.lane !== null && !lockedLane.has(a.judge_id)) lockedLane.set(a.judge_id, a.lane);
+    });
+    const planned: { edition_id: string; game: PalioGame; heat_number: number; is_extra: false; judge_id: string; lane: number; role: JudgeRole }[] = [];
     let unfilled = 0;
     let againstPreference = 0;
+    let laneChanges = 0;
 
     for (const g of availableGames) {
       for (const heatNumber of getHeatNumbers(heats, g)) {
@@ -309,21 +372,33 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
           assignments.filter((a) => a.game === g && (a.heat_number === heatNumber || a.heat_number === null)).map((a) => a.judge_id)
         );
         const participants = getParticipantContradaIds(g, heatNumber);
-        for (const role of getJudgeRoles(g)) {
-          if (assignments.some((a) => a.game === g && !a.is_extra && a.heat_number === heatNumber && a.role === role)) continue;
-          const category: JudgePreference = role === 'cronometrista' ? 'cronometrista' : 'giudice';
-          const rank = (judge: Judge) => (judge.preferred_role === category ? 0 : judge.preferred_role === null ? 1 : 2);
-          const [best] = judges
-            .filter((judge) => !taken.has(judge.id) && !judge.contrada_ids.some((id) => participants.has(id)))
-            .sort((a, b) => rank(a) - rank(b) || (load.get(a.id) ?? 0) - (load.get(b.id) ?? 0) || a.name.localeCompare(b.name, 'it'));
-          if (!best) {
-            unfilled += 1;
-            continue;
+        for (const lane of getLaneNumbers(heats, g, heatNumber)) {
+          for (const role of getJudgeRoles(g)) {
+            if (assignments.some((a) => a.game === g && !a.is_extra && a.heat_number === heatNumber && a.lane === lane && a.role === role)) continue;
+            const category: JudgePreference = role === 'cronometrista' ? 'cronometrista' : 'giudice';
+            const preferenceRank = (judge: Judge) => (judge.preferred_role === category ? 0 : judge.preferred_role === null ? 1 : 2);
+            const laneRank = (judge: Judge) => {
+              const locked = lockedLane.get(judge.id);
+              return locked === undefined ? 1 : locked === lane ? 0 : 2;
+            };
+            const [best] = judges
+              .filter((judge) => !taken.has(judge.id) && !fixedJudgeIds.has(judge.id) && !judge.contrada_ids.some((id) => participants.has(id)))
+              .sort((a, b) =>
+                laneRank(a) - laneRank(b)
+                || preferenceRank(a) - preferenceRank(b)
+                || (load.get(a.id) ?? 0) - (load.get(b.id) ?? 0)
+                || a.name.localeCompare(b.name, 'it'));
+            if (!best) {
+              unfilled += 1;
+              continue;
+            }
+            if (laneRank(best) === 2) laneChanges += 1;
+            if (preferenceRank(best) === 2) againstPreference += 1;
+            if (!lockedLane.has(best.id)) lockedLane.set(best.id, lane);
+            taken.add(best.id);
+            load.set(best.id, (load.get(best.id) ?? 0) + 1);
+            planned.push({ edition_id: editionId, game: g, heat_number: heatNumber, is_extra: false, judge_id: best.id, lane, role });
           }
-          if (rank(best) === 2) againstPreference += 1;
-          taken.add(best.id);
-          load.set(best.id, (load.get(best.id) ?? 0) + 1);
-          planned.push({ edition_id: editionId, game: g, heat_number: heatNumber, is_extra: false, judge_id: best.id, role });
         }
       }
     }
@@ -337,6 +412,7 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
     if (await run(() => supabase.from('palio_judge_assignments').insert(planned), 'Errore abbinamento automatico')) {
       const notes = [
         unfilled > 0 ? `${unfilled} posti rimasti vuoti (giudici insufficienti o in conflitto)` : '',
+        laneChanges > 0 ? `${laneChanges} giudici hanno dovuto cambiare corsia` : '',
         againstPreference > 0 ? `${againstPreference} contro la preferenza` : '',
       ].filter(Boolean);
       setMessage(`Abbinati ${planned.length} incarichi${notes.length ? `; ${notes.join('; ')}` : ''}.`);
@@ -351,22 +427,59 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
       : `Eliminare ${judge.name}?`;
     if (!window.confirm(warning)) return;
     if (await run(() => supabase.from('palio_judges').delete().eq('id', judge.id), 'Errore eliminazione giudice')) {
-      await Promise.all([fetchJudges(), fetchAssignments()]);
+      await Promise.all([fetchJudges(), fetchAssignments(), fetchFixed()]);
     }
   }
 
-  async function handleSetTitolare(heatNumber: number, role: JudgeRole, judgeId: string) {
+  async function handleSetTitolare(heatNumber: number, lane: number, role: JudgeRole, judgeId: string) {
     if (!editionId) return;
-    const current = gameAssignments.find((a) => !a.is_extra && a.heat_number === heatNumber && a.role === role);
+    const current = gameAssignments.find((a) => !a.is_extra && a.heat_number === heatNumber && a.lane === lane && a.role === role);
     const ok = await run(() => {
       if (!judgeId && current) return supabase.from('palio_judge_assignments').delete().eq('id', current.id);
       if (!judgeId) return Promise.resolve({ error: null });
       if (current) return supabase.from('palio_judge_assignments').update({ judge_id: judgeId }).eq('id', current.id);
       return supabase.from('palio_judge_assignments').insert({
-        edition_id: editionId, game, heat_number: heatNumber, is_extra: false, judge_id: judgeId, role,
+        edition_id: editionId, game, heat_number: heatNumber, is_extra: false, judge_id: judgeId, lane, role,
       });
     }, 'Errore salvataggio abbinamento');
     if (ok) await fetchAssignments();
+  }
+
+  // Vecchi abbinamenti titolari fatti per batteria, senza corsia.
+  const legacyAssignments = useMemo(() => assignments.filter((a) => !a.is_extra && a.lane === null), [assignments]);
+
+  async function handleRemoveLegacy() {
+    if (!editionId || legacyAssignments.length === 0) return;
+    if (!window.confirm(`Rimuovere i ${legacyAssignments.length} abbinamenti titolari senza corsia di questa edizione?`)) return;
+    if (await run(
+      () => supabase.from('palio_judge_assignments').delete().in('id', legacyAssignments.map((a) => a.id)),
+      'Errore rimozione abbinamenti'
+    )) {
+      await fetchAssignments();
+    }
+  }
+
+  // Figure fisse: chi è abbinato a una Contrada o ha già incarichi (di corsia
+  // o di altra figura fissa) nell'edizione non può ricoprirle.
+  function getFixedOptions(): Judge[] {
+    const busyJudgeIds = new Set([...assignments, ...fixedAssignments].map((a) => a.judge_id));
+    return judges.filter((judge) => judge.contrada_ids.length === 0 && !busyJudgeIds.has(judge.id));
+  }
+
+  async function handleAddFixed(role: FixedRole, judgeId: string) {
+    if (!editionId) return;
+    if (await run(
+      () => supabase.from('palio_judge_fixed').insert({ edition_id: editionId, judge_id: judgeId, role }),
+      'Errore aggiunta figura fissa'
+    )) {
+      await fetchFixed();
+    }
+  }
+
+  async function handleRemoveFixed(id: string) {
+    if (await run(() => supabase.from('palio_judge_fixed').delete().eq('id', id), 'Errore rimozione figura fissa')) {
+      await fetchFixed();
+    }
   }
 
   async function handleAddExtra(heatNumber: number | null, role: JudgeRole, judgeId: string) {
@@ -527,6 +640,57 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
       </div>
 
       <div className="rounded-lg border border-stone-800 bg-stone-900 p-4">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-stone-300">Figure fisse</h2>
+        <p className="mt-1 text-xs text-stone-500">
+          Valgono per tutto il Palio, non per batteria o corsia, e possono essere più di una. Non possono esserlo i giudici abbinati a una Contrada.
+        </p>
+        {!edition ? (
+          <p className="mt-2 text-sm text-stone-400">Seleziona (o crea) un&apos;edizione in alto per assegnare le figure fisse.</p>
+        ) : (
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            {fixedRoles.map((role) => (
+              <div key={role} className="space-y-2 rounded-md border border-stone-800 bg-stone-950 p-3">
+                <h3 className="text-sm font-semibold text-stone-100">{fixedRoleLabels[role]}</h3>
+                <ul className="flex flex-wrap gap-2">
+                  {fixedAssignments.filter((a) => a.role === role).map((fixed) => (
+                    <li
+                      key={fixed.id}
+                      className="flex items-center gap-1.5 rounded-full border border-stone-700 bg-stone-900 py-1 pl-3 pr-1 text-xs text-stone-200"
+                    >
+                      {judgeNames.get(fixed.judge_id) ?? 'Giudice'}
+                      <button
+                        aria-label={`Rimuovi ${judgeNames.get(fixed.judge_id) ?? 'giudice'} come ${fixedRoleLabels[role].toLowerCase()}`}
+                        className="rounded-full p-1 text-stone-400 hover:bg-stone-800 hover:text-red-400 disabled:opacity-50"
+                        disabled={busy}
+                        onClick={() => handleRemoveFixed(fixed.id)}
+                        type="button"
+                      >
+                        <X aria-hidden="true" className="h-3 w-3" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <select
+                  aria-label={`Aggiungi ${fixedRoleLabels[role].toLowerCase()}`}
+                  className="rounded-md border border-stone-700 bg-stone-800 px-2 py-1 text-xs text-stone-200 disabled:opacity-50"
+                  disabled={busy || getFixedOptions().length === 0}
+                  onChange={(e) => {
+                    if (e.target.value) handleAddFixed(role, e.target.value);
+                  }}
+                  value=""
+                >
+                  <option value="">+ Aggiungi</option>
+                  {getFixedOptions().map((judge) => (
+                    <option key={judge.id} value={judge.id}>{judge.name}</option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-lg border border-stone-800 bg-stone-900 p-4">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-stone-300">Abbinamenti per batteria</h2>
         {!edition ? (
           <p className="mt-2 text-sm text-stone-400">
@@ -544,8 +708,19 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
                 <Wand2 className="h-4 w-4" />
                 Abbina automaticamente
               </button>
+              {legacyAssignments.length > 0 && (
+                <button
+                  className="inline-flex items-center gap-1.5 rounded-md border border-amber-700 px-3 py-1.5 text-sm font-semibold text-amber-200 hover:border-amber-400 disabled:opacity-50"
+                  disabled={busy}
+                  onClick={handleRemoveLegacy}
+                  type="button"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Rimuovi {legacyAssignments.length} abbinamenti senza corsia
+                </button>
+              )}
               <p className="text-xs text-stone-500">
-                Riempie solo i posti titolari vuoti di tutti i giochi, rispettando preferenze e Contrade; gli abbinamenti già fatti restano.
+                Riempie solo i posti titolari vuoti (per corsia) di tutti i giochi, rispettando preferenze e Contrade e tenendo, se possibile, ogni giudice sulla stessa corsia; gli abbinamenti già fatti restano.
               </p>
             </div>
             <div className="mt-3 flex flex-wrap gap-2" role="tablist">
@@ -578,28 +753,64 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
                     <h3 className="text-sm font-semibold text-stone-100">
                       {game === 'melocotogno' || game === 'finale' ? `${palioGameLabels[game]} (prova unica)` : `Batteria ${heatNumber}`}
                     </h3>
-                    {judgeRoles.map((role) => {
-                      const current = gameAssignments.find((a) => !a.is_extra && a.heat_number === heatNumber && a.role === role);
-                      return (
-                        <label key={role} className="flex flex-col gap-1 text-xs font-semibold text-stone-400">
-                          <span className="flex items-center gap-1.5">
-                            {role === 'cronometrista' ? <Timer aria-hidden="true" className="h-3.5 w-3.5" /> : <Gavel aria-hidden="true" className="h-3.5 w-3.5" />}
-                            {roleLabels[role]}
-                          </span>
-                          <select
-                            className="rounded-md border border-stone-700 bg-stone-800 px-2 py-1.5 text-sm font-normal text-stone-100 disabled:opacity-50"
-                            disabled={busy}
-                            onChange={(e) => handleSetTitolare(heatNumber, role, e.target.value)}
-                            value={current?.judge_id ?? ''}
-                          >
-                            <option value="">Non assegnato</option>
-                            {getJudgeOptions(heatNumber, current?.judge_id).map((judge) => (
-                              <option key={judge.id} value={judge.id}>{judge.name}</option>
+                    {getLaneNumbers(heats, game, heatNumber).map((lane) => (
+                      <div key={lane} className="space-y-2 rounded-md border border-stone-800 bg-stone-900/60 p-2">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-palio-300">Corsia {lane}</p>
+                        {judgeRoles.map((role) => {
+                          const current = gameAssignments.find((a) => !a.is_extra && a.heat_number === heatNumber && a.lane === lane && a.role === role);
+                          const otherLanes = current
+                            ? Array.from(judgeLanes.get(current.judge_id) ?? []).filter((l) => l !== lane).sort((a, b) => a - b)
+                            : [];
+                          return (
+                            <label key={role} className="flex flex-col gap-1 text-xs font-semibold text-stone-400">
+                              <span className="flex items-center gap-1.5">
+                                {role === 'cronometrista' ? <Timer aria-hidden="true" className="h-3.5 w-3.5" /> : <Gavel aria-hidden="true" className="h-3.5 w-3.5" />}
+                                {roleLabels[role]}
+                              </span>
+                              <select
+                                className="rounded-md border border-stone-700 bg-stone-800 px-2 py-1.5 text-sm font-normal text-stone-100 disabled:opacity-50"
+                                disabled={busy}
+                                onChange={(e) => handleSetTitolare(heatNumber, lane, role, e.target.value)}
+                                value={current?.judge_id ?? ''}
+                              >
+                                <option value="">Non assegnato</option>
+                                {getJudgeOptions(heatNumber, current?.judge_id).map((judge) => (
+                                  <option key={judge.id} value={judge.id}>{judge.name}</option>
+                                ))}
+                              </select>
+                              {otherLanes.length > 0 && (
+                                <span className="font-normal text-amber-300">
+                                  Cambia corsia: è anche in corsia {otherLanes.join(', ')}
+                                </span>
+                              )}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    ))}
+                    {gameAssignments.some((a) => !a.is_extra && a.heat_number === heatNumber && a.lane === null) && (
+                      <div className="rounded-md border border-amber-900/60 bg-amber-950/20 p-2 text-xs text-amber-200">
+                        <p className="mb-1 font-semibold">Abbinamenti senza corsia (vecchi)</p>
+                        <ul className="space-y-1">
+                          {gameAssignments
+                            .filter((a) => !a.is_extra && a.heat_number === heatNumber && a.lane === null)
+                            .map((a) => (
+                              <li key={a.id} className="flex items-center justify-between gap-2">
+                                <span>{roleLabels[a.role]}: {judgeNames.get(a.judge_id) ?? 'Giudice'}</span>
+                                <button
+                                  aria-label={`Rimuovi ${judgeNames.get(a.judge_id) ?? 'giudice'} come ${roleLabels[a.role].toLowerCase()} senza corsia`}
+                                  className="rounded p-1 hover:bg-stone-800 hover:text-red-400 disabled:opacity-50"
+                                  disabled={busy}
+                                  onClick={() => handleRemoveAssignment(a.id)}
+                                  type="button"
+                                >
+                                  <X aria-hidden="true" className="h-3 w-3" />
+                                </button>
+                              </li>
                             ))}
-                          </select>
-                        </label>
-                      );
-                    })}
+                        </ul>
+                      </div>
+                    )}
                     <div>
                       <p className="mb-1 text-xs font-semibold text-stone-400">Extra per questa batteria</p>
                       {renderExtras(heatNumber)}
