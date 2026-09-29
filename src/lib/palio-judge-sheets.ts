@@ -293,9 +293,20 @@ function drawSummaryPage(doc: PdfDoc, input: JudgeSheetsInput, games: PalioGame[
   });
 }
 
+/** Errore del caricamento di jsPDF: di solito la pagina è aperta da prima di un nuovo deploy. */
+export const OUTDATED_APP_MESSAGE = 'Versione della pagina non aggiornata: ricarica (Cmd/Ctrl + Maiusc + R) e riprova';
+
 export async function createDoc(): Promise<PdfDoc> {
-  const { jsPDF } = await import('jspdf');
-  return new jsPDF({ format: 'a4', orientation: 'portrait', unit: 'mm' });
+  let jsPDFModule: typeof import('jspdf');
+  try {
+    jsPDFModule = await import('jspdf');
+  } catch (error) {
+    // Dopo un deploy i file con hash vecchio non esistono più: il server risponde
+    // con l'index.html e l'import dinamico fallisce.
+    console.error('Error loading jspdf chunk:', error);
+    throw new Error(OUTDATED_APP_MESSAGE);
+  }
+  return new jsPDFModule.jsPDF({ format: 'a4', orientation: 'portrait', unit: 'mm' });
 }
 
 export const fileSlug = (edition: PalioEdition) => `${edition.year}-${edition.month}`;

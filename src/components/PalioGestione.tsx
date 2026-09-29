@@ -15,7 +15,7 @@ import {
   getPalioGamesForMonth,
   palioGameLabels as liveGameLabels,
 } from '../hooks/usePalioLiveData';
-import { type JudgeSheetAssignment, downloadFinaleSheetsPdf, downloadJudgeSheetsPdf } from '../lib/palio-judge-sheets';
+import { OUTDATED_APP_MESSAGE, type JudgeSheetAssignment, downloadFinaleSheetsPdf, downloadJudgeSheetsPdf } from '../lib/palio-judge-sheets';
 import { downloadResultsPdf, type PalioResultsPdfResult } from '../lib/palio-results-pdf';
 import {
   type PalioEditionResultInput,
@@ -314,7 +314,7 @@ function PalioResultsInputContent() {
       }
     } catch (error) {
       console.error('Error generating judge sheets:', error);
-      setRegiaStatusMessage('Errore nella generazione del PDF delle schede');
+      setRegiaStatusMessage(error instanceof Error && error.message === OUTDATED_APP_MESSAGE ? OUTDATED_APP_MESSAGE : 'Errore nella generazione del PDF delle schede');
     } finally {
       setGeneratingSheets(null);
     }
@@ -346,7 +346,7 @@ function PalioResultsInputContent() {
       });
     } catch (error) {
       console.error('Error generating results PDF:', error);
-      setStatusMessage('Errore nella generazione del PDF dei risultati');
+      setStatusMessage(error instanceof Error && error.message === OUTDATED_APP_MESSAGE ? OUTDATED_APP_MESSAGE : 'Errore nella generazione del PDF dei risultati');
     } finally {
       setGeneratingResultsPdf(false);
     }
