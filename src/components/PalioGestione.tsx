@@ -1,8 +1,9 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle, Clock, Download, Eye, EyeOff, Flag, Minus, Plus, PlusCircle, Repeat, RotateCcw, Save, Send, Trophy, Users as UsersIcon, Utensils } from 'lucide-react';
+import { AlertCircle, CheckCircle, Clock, Download, Eye, EyeOff, Flag, Gavel, Minus, Plus, PlusCircle, Repeat, RotateCcw, Save, Send, Trophy, Users as UsersIcon, Utensils } from 'lucide-react';
 import { getSupabaseClient } from '../config';
 import { AuspiciGestioneContent } from './AuspiciGestione';
 import { PalioAuthGate } from './PalioAuthGate';
+import { PalioGiudici } from './PalioGiudici';
 import { PalioUserManagement } from './PalioUserManagement';
 import { usePalioAuth } from '../hooks/usePalioAuth';
 import {
@@ -141,7 +142,7 @@ function PalioResultsInputContent() {
   const [heatsStatusMessage, setHeatsStatusMessage] = useState('');
   const [generatingSheets, setGeneratingSheets] = useState<'giudici' | 'finale' | null>(null);
   const [generatingResultsPdf, setGeneratingResultsPdf] = useState(false);
-  const [activeSection, setActiveSection] = useState<'estrazioni' | 'giochi' | 'auspici' | 'utenti'>('estrazioni');
+  const [activeSection, setActiveSection] = useState<'estrazioni' | 'giochi' | 'giudici' | 'auspici' | 'utenti'>('estrazioni');
   const { isAdmin } = usePalioAuth();
   const [resultsSortMode, setResultsSortMode] = useState<'alfabetico' | 'batteria' | 'corsia'>('alfabetico');
 
@@ -1234,6 +1235,16 @@ function PalioResultsInputContent() {
         </button>
         <button
           type="button"
+          onClick={() => setActiveSection('giudici')}
+          className={`flex items-center gap-2 rounded-t-md px-4 py-2 text-sm font-semibold transition ${
+            activeSection === 'giudici' ? 'border-b-2 border-palio-500 text-palio-300' : 'text-stone-400 hover:text-stone-200'
+          }`}
+        >
+          <Gavel className="h-4 w-4" />
+          Giudici
+        </button>
+        <button
+          type="button"
           onClick={() => setActiveSection('auspici')}
           className={`flex items-center gap-2 rounded-t-md px-4 py-2 text-sm font-semibold transition ${
             activeSection === 'auspici' ? 'border-b-2 border-palio-500 text-palio-300' : 'text-stone-400 hover:text-stone-200'
@@ -1259,6 +1270,12 @@ function PalioResultsInputContent() {
       {activeSection === 'utenti' && isAdmin && (
         <div className="mt-4">
           <PalioUserManagement />
+        </div>
+      )}
+
+      {activeSection === 'giudici' && (
+        <div className="mt-4">
+          <PalioGiudici availableGames={availableGames} edition={selectedEdition} heats={heats} />
         </div>
       )}
 
