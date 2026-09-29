@@ -318,12 +318,14 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
   // Le figure fisse sono sempre al loro posto: non hanno incarichi di corsia.
   const fixedJudgeIds = useMemo(() => new Set(fixedAssignments.map((a) => a.judge_id)), [fixedAssignments]);
 
-  // Corsie in cui ogni giudice ha già un incarico titolare nell'edizione.
+  // Corsie in cui ogni giudice ha già un incarico titolare, per gioco (chiave
+  // "gioco|giudice"): cambiare corsia da un gioco all'altro va bene.
   const judgeLanes = useMemo(() => {
     const lanes = new Map<string, Set<number>>();
     assignments.forEach((a) => {
       if (a.is_extra || a.lane === null) return;
-      lanes.set(a.judge_id, (lanes.get(a.judge_id) ?? new Set<number>()).add(a.lane));
+      const key = `${a.game}|${a.judge_id}`;
+      lanes.set(key, (lanes.get(key) ?? new Set<number>()).add(a.lane));
     });
     return lanes;
   }, [assignments]);
@@ -459,7 +461,7 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
   // batteria risolve un'assegnazione a costo minimo tra posti (corsia x ruolo)
   // e giudici, escludendo chi è già in quella batteria, è figura fissa o ha una
   // Contrada che gareggia lì. Prima si massimizzano i posti coperti, poi si
-  // preferisce: chi resta sulla stessa corsia (un giudice non cambia corsia,
+  // preferisce: chi resta sulla stessa corsia nello stesso gioco (un giudice non cambia corsia,
   // se possibile) o non ne ha ancora una, poi la preferenza (giusta,
   // indifferente, opposta) e, a parità, chi ha meno incarichi.
   async function handleAutoAssign() {
@@ -467,7 +469,8 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
     const load = new Map(assignmentCounts);
     const lockedLane = new Map<string, number>();
     assignments.forEach((a) => {
-      if (!a.is_extra && a.lane !== null && !lockedLane.has(a.judge_id)) lockedLane.set(a.judge_id, a.lane);
+      const key = `${a.game}|${a.judge_id}`;
+      if (!a.is_extra && a.lane !== null && !lockedLane.has(key)) lockedLane.set(key, a.lane);
     });
     const planned: { edition_id: string; game: PalioGame; heat_number: number; is_extra: false; judge_id: string; lane: number; role: JudgeRole }[] = [];
     const missing: string[] = [];
@@ -500,7 +503,7 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
             return judge.preferred_role === category ? 0 : judge.preferred_role === null ? 1 : 2;
           };
           const laneRank = (judge: Judge, lane: number) => {
-            const locked = lockedLane.get(judge.id);
+            const locked = lockedLane.get(`${g}|${judge.id}`);
             return locked === undefined ? 1 : locked === lane ? 0 : 2;
           };
           const cost = slots.map(({ lane, role }) => judges.map((judge, index) =>
@@ -519,7 +522,7 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
             const judge = judges[judgeIndex];
             if (laneRank(judge, lane) === 2) laneChanges += 1;
             if (preferenceRank(judge, role) === 2) againstPreference += 1;
-            if (!lockedLane.has(judge.id)) lockedLane.set(judge.id, lane);
+            if (!lockedLane.has(`${g}|${judge.id}`)) lockedLane.set(`${g}|${judge.id}`, lane);
             load.set(judge.id, (load.get(judge.id) ?? 0) + 1);
             planned.push({ edition_id: editionId, game: g, heat_number: heatNumber, is_extra: false, judge_id: judge.id, lane, role });
           });
@@ -967,7 +970,7 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
                         {judgeRoles.map((role) => {
                           const current = gameAssignments.find((a) => !a.is_extra && a.heat_number === heatNumber && a.lane === lane && a.role === role);
                           const otherLanes = current
-                            ? Array.from(judgeLanes.get(current.judge_id) ?? []).filter((l) => l !== lane).sort((a, b) => a - b)
+                            ? Array.from(judgeLanes.get(`${game}|${current.judge_id}`) ?? []).filter((l) => l !== lane).sort((a, b) => a - b)
                             : [];
                           return (
                             <label key={role} className="flex flex-col gap-1 text-xs font-semibold text-stone-400">
