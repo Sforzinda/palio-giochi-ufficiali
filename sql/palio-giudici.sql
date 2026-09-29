@@ -11,7 +11,9 @@
 --     (lane null solo per i vecchi abbinamenti a livello di batteria);
 --   * extra: is_extra = true, legato a una batteria (heat_number) oppure
 --     all'intero gioco (heat_number null), in numero libero.
--- I ruoli giudice_campo e giudice_gonna valgono solo per il cerchio.
+-- I ruoli giudice_campo, giudice_gonna e giudice_fantapalio non sono più usati
+-- come ruoli di corsia (gonna e FantaPalio sono figure fisse, vedi palio_judge_fixed);
+-- i valori restano nell'enum solo per i vecchi abbinamenti.
 -- Le prove senza batterie (melocotogno, finale) usano heat_number = 1.
 
 create table if not exists public.palio_judges (
