@@ -229,8 +229,8 @@ function ExtraAdder({ disabled, judgeOptions, onAdd, roles }: ExtraAdderProps) {
  * Tab "Giudici" della Gestione: anagrafica dei giudici e abbinamento, per ogni
  * batteria di ogni gioco, di un cronometrista e di un giudice delle penalità
  * (titolari), più eventuali extra validi per una batteria o per l'intero gioco.
- * Un giudice abbinato a una Contrada non può mai avere incarichi nelle batterie
- * in cui gareggia una di quelle Contrade.
+ * Un giudice abbinato a una Contrada non può mai stare nella corsia in cui
+ * gareggia una di esse, in quella batteria; nelle altre corsie sì.
  */
 export function PalioGiudici({ availableGames, contrade, edition, heats }: PalioGiudiciProps) {
   const supabase = useMemo(() => getSupabaseClient(), []);
@@ -330,6 +330,23 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
 
   // Contrada (e se è senza giocatori) in una corsia di una batteria; per
   // melocotogno e finale le corsie non hanno Contrade note.
+  function getLaneContradaId(targetGame: PalioGame, heatNumber: number, lane: number): string | null {
+    const heat = heats.find((h) => h.game === targetGame && h.heat_number === heatNumber && h.display_order === lane);
+    return heat?.contrada_id ?? null;
+  }
+
+  // Un giudice non può stare nella corsia (di quella batteria) dove gareggia una
+  // delle sue Contrade; nelle altre corsie sì. Per melocotogno e finale le
+  // corsie non hanno Contrade note (le finaliste si conoscono solo a risultati
+  // calcolati): per prudenza il conflitto vale sempre. Nel melocotogno invece
+  // ogni giudice può fare il cronometrista, qualunque sia la sua Contrada.
+  function hasLaneConflict(judge: Judge, targetGame: PalioGame, heatNumber: number, lane: number): boolean {
+    if (judge.contrada_ids.length === 0 || targetGame === 'melocotogno') return false;
+    if (targetGame === 'finale') return true;
+    const contradaId = getLaneContradaId(targetGame, heatNumber, lane);
+    return contradaId !== null && judge.contrada_ids.includes(contradaId);
+  }
+
   function getLaneContrada(heatNumber: number, lane: number): { name: string; noPlayers: boolean } | null {
     if (game === 'melocotogno' || game === 'finale') return null;
     const heat = heats.find((h) => h.game === game && h.heat_number === heatNumber && h.display_order === lane);
@@ -340,7 +357,8 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
   // è null). Melocotogno e finale non hanno batterie note: le finaliste si
   // conoscono solo a risultati calcolati, quindi per prudenza contano tutte.
   function getParticipantContradaIds(targetGame: PalioGame, heatNumber: number | null): Set<string> {
-    if (targetGame === 'melocotogno' || targetGame === 'finale') return new Set(contrade.map((c) => c.id));
+    if (targetGame === 'melocotogno') return new Set();
+    if (targetGame === 'finale') return new Set(contrade.map((c) => c.id));
     return new Set(
       heats
         .filter((heat) => heat.game === targetGame && (heatNumber === null || heat.heat_number === heatNumber))
@@ -349,16 +367,23 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
   }
 
   // Un giudice non può stare due volte nello stesso ambito (batteria o intero
-  // gioco), in qualunque ruolo, né lavorare dove gareggia la sua Contrada: le
-  // opzioni escludono chi è già presente o è in conflitto.
-  function getJudgeOptions(heatNumber: number | null, keepJudgeId?: string): Judge[] {
+  // gioco), in qualunque ruolo, né lavorare nella corsia dove gareggia la sua
+  // Contrada. Gli extra non hanno corsia (lane assente): per loro conta l'intera
+  // batteria (o l'intero gioco). Le opzioni escludono chi è già presente o è
+  // in conflitto.
+  function getJudgeOptions(heatNumber: number | null, keepJudgeId?: string, lane?: number): Judge[] {
     const participants = getParticipantContradaIds(game, heatNumber);
     const taken = new Set(
       gameAssignments
         .filter((a) => a.heat_number === heatNumber && a.judge_id !== keepJudgeId)
         .map((a) => a.judge_id)
     );
-    return judges.filter((judge) => !taken.has(judge.id) && !fixedJudgeIds.has(judge.id) && !judge.contrada_ids.some((id) => participants.has(id)));
+    return judges.filter((judge) => {
+      if (taken.has(judge.id) || fixedJudgeIds.has(judge.id)) return false;
+      return lane !== undefined && heatNumber !== null
+        ? !hasLaneConflict(judge, game, heatNumber, lane)
+        : !judge.contrada_ids.some((id) => participants.has(id));
+    });
   }
 
   async function run(action: () => PromiseLike<{ error: { message: string } | null }>, errorLabel: string) {
@@ -399,11 +424,15 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
 
   async function handleToggleJudgeContrada(judge: Judge, contradaId: string, checked: boolean) {
     const conflicts = checked
-      ? assignments.filter((a) => a.judge_id === judge.id && getParticipantContradaIds(a.game, a.heat_number).has(contradaId))
+      ? assignments.filter((a) => a.judge_id === judge.id && (
+        !a.is_extra && a.lane !== null && a.heat_number !== null
+          ? hasLaneConflict({ ...judge, contrada_ids: [contradaId] }, a.game, a.heat_number, a.lane)
+          : getParticipantContradaIds(a.game, a.heat_number).has(contradaId)
+      ))
       : [];
     if (conflicts.length > 0) {
       const contradaName = contrade.find((c) => c.id === contradaId)?.name ?? 'questa Contrada';
-      const warning = `${judge.name} ha ${conflicts.length} incarichi in prove dove gareggia ${contradaName}: verranno rimossi. Continuare?`;
+      const warning = `${judge.name} ha ${conflicts.length} incarichi nelle corsie/prove dove gareggia ${contradaName}: verranno rimossi. Continuare?`;
       if (!window.confirm(warning)) return;
     }
     const ok = await run(async () => {
@@ -456,7 +485,6 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
             ...assignments.filter((a) => a.game === g && (a.heat_number === heatNumber || a.heat_number === null)).map((a) => a.judge_id),
             ...planned.filter((a) => a.game === g && a.heat_number === heatNumber).map((a) => a.judge_id),
           ]);
-          const participants = getParticipantContradaIds(g, heatNumber);
           const slots = getLaneNumbers(heats, g, heatNumber)
             .flatMap((lane) => getJudgeRoles(g).filter((role) => optionalRoles.includes(role) === optionalPhase).map((role) => ({ lane, role })))
             .filter(({ lane, role }) => !assignments.some(
@@ -476,7 +504,7 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
             return locked === undefined ? 1 : locked === lane ? 0 : 2;
           };
           const cost = slots.map(({ lane, role }) => judges.map((judge, index) =>
-            taken.has(judge.id) || fixedJudgeIds.has(judge.id) || judge.contrada_ids.some((id) => participants.has(id))
+            taken.has(judge.id) || fixedJudgeIds.has(judge.id) || hasLaneConflict(judge, g, heatNumber, lane)
               ? UNAVAILABLE_COST
               : laneRank(judge, lane) * 10000 + preferenceRank(judge, role) * 1000 + Math.min(load.get(judge.id) ?? 0, 99) * 10 + index / 1000
           ));
@@ -589,11 +617,11 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
     }
   }
 
-  // Figure fisse: chi è abbinato a una Contrada o ha già incarichi (di corsia
-  // o di altra figura fissa) nell'edizione non può ricoprirle.
+  // Figure fisse: valgono per qualsiasi Contrada. Non può ricoprirle chi ha già
+  // incarichi (di corsia o di altra figura fissa) nell'edizione.
   function getFixedOptions(): Judge[] {
     const busyJudgeIds = new Set([...assignments, ...fixedAssignments].map((a) => a.judge_id));
-    return judges.filter((judge) => judge.contrada_ids.length === 0 && !busyJudgeIds.has(judge.id));
+    return judges.filter((judge) => !busyJudgeIds.has(judge.id));
   }
 
   async function handleAddFixed(role: FixedRole, judgeId: string) {
@@ -671,7 +699,7 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
       <div className="rounded-lg border border-stone-800 bg-stone-900 p-4">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-stone-300">Elenco giudici</h2>
         <p className="mt-1 text-xs text-stone-500">
-          L&apos;elenco è valido per tutte le edizioni. Puoi inserirne più del necessario: quelli non abbinati restano a disposizione. Se abbini un giudice a una o più Contrade, non potrà mai avere incarichi nelle prove in cui gareggia una di quelle Contrade.
+          L&apos;elenco è valido per tutte le edizioni. Puoi inserirne più del necessario: quelli non abbinati restano a disposizione. Se abbini un giudice a una o più Contrade, non potrà mai stare nella corsia in cui gareggia una di quelle Contrade (nelle altre corsie sì); l'abbinamento automatico lo sostituisce con un altro giudice.
         </p>
         <form className="mt-3 flex flex-wrap items-end gap-3" onSubmit={handleAddJudge}>
           <label className="text-sm font-semibold text-stone-300">
@@ -772,7 +800,7 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
       <div className="rounded-lg border border-stone-800 bg-stone-900 p-4">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-stone-300">Figure fisse</h2>
         <p className="mt-1 text-xs text-stone-500">
-          Valgono per tutto il Palio, non per batteria o corsia, e possono essere più di una. Non possono esserlo i giudici abbinati a una Contrada.
+          Valgono per tutto il Palio, non per batteria o corsia, e possono essere più di una. Possono essere di qualsiasi Contrada.
         </p>
         {!edition ? (
           <p className="mt-2 text-sm text-stone-400">Seleziona (o crea) un&apos;edizione in alto per assegnare le figure fisse.</p>
@@ -954,7 +982,7 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
                                 value={current?.judge_id ?? ''}
                               >
                                 <option value="">Non assegnato</option>
-                                {getJudgeOptions(heatNumber, current?.judge_id).map((judge) => (
+                                {getJudgeOptions(heatNumber, current?.judge_id, lane).map((judge) => (
                                   <option key={judge.id} value={judge.id}>{judge.name}</option>
                                 ))}
                               </select>

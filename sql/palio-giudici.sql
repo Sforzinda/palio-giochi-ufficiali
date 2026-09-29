@@ -105,8 +105,8 @@ create unique index if not exists palio_judge_assignments_titolare_unique
 
 -- Figure fisse dell'edizione (giudice del FantaPalio e giudice del banco):
 -- valgono per tutto il Palio, non per batteria o corsia, e possono essere più
--- di una. Un giudice abbinato a una Contrada non può ricoprirle (sarebbe
--- presente ovunque gareggi); chi è figura fissa non ha incarichi di corsia.
+-- di una. Possono essere di qualsiasi Contrada; chi è figura fissa non ha
+-- incarichi di corsia.
 create table if not exists public.palio_judge_fixed (
   id uuid primary key default gen_random_uuid(),
   edition_id uuid not null references public.palio_editions(id) on delete cascade,
