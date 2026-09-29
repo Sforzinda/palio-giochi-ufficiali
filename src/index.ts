@@ -26,6 +26,7 @@ export type {
 export { PalioDraw } from './pages/PalioDraw'
 export { PalioLive } from './pages/PalioLive'
 export { PalioLiveMobile } from './pages/PalioLiveMobile'
+export { PalioArchivio } from './pages/PalioArchivio'
 export { PalioWinnerCelebration } from './components/PalioWinnerCelebration'
 
 export { usePalioAuth } from './hooks/usePalioAuth'

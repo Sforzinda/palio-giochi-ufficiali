@@ -148,7 +148,7 @@ function PalioResultsInputContent() {
   const fetchEditions = useCallback(async () => {
     const { data, error } = await supabase
       .from('palio_editions')
-      .select('id, year, month')
+      .select('id, year, month, archive_visible')
       .order('year', { ascending: false });
     if (error) {
       console.error('Error fetching palio editions:', error);
@@ -635,6 +635,30 @@ function PalioResultsInputContent() {
       setStatusMessage(`Risultati ${formatPalioEditionLabel(edition)} salvati. Il ricalcolo dei punteggi Fanta si fa dal pannello Admin del Fanta.`);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleToggleArchiveVisible() {
+    if (!selectedEdition) {
+      setRegiaStatusMessage("Seleziona prima un'edizione");
+      return;
+    }
+
+    const nextValue = !selectedEdition.archive_visible;
+    setSavingLiveField('archive_visible');
+    try {
+      const { error } = await supabase
+        .from('palio_editions')
+        .update({ archive_visible: nextValue })
+        .eq('id', selectedEdition.id);
+      if (error) {
+        setRegiaStatusMessage(`Errore aggiornamento archivio: ${error.message}`);
+        return;
+      }
+      await fetchEditions();
+      setRegiaStatusMessage(nextValue ? 'Edizione visibile in archivio' : 'Edizione nascosta dall\'archivio');
+    } finally {
+      setSavingLiveField(null);
     }
   }
 
@@ -1144,6 +1168,20 @@ function PalioResultsInputContent() {
           >
             {selectedLiveControl?.is_active ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             {selectedLiveControl?.is_active ? 'Disattiva diretta' : 'Attiva questa edizione'}
+          </button>
+        </div>
+        <div className="flex w-full flex-wrap items-center gap-3">
+          <div className={`rounded-md px-3 py-2 text-sm font-semibold ${selectedEdition?.archive_visible ? 'bg-emerald-950/40 text-emerald-300' : 'bg-stone-800 text-stone-400'}`}>
+            {selectedEdition?.archive_visible ? 'Risultati visibili in /archivio' : 'Risultati nascosti dall\'archivio'}
+          </div>
+          <button
+            type="button"
+            disabled={!selectedEdition || savingLiveField === 'archive_visible'}
+            onClick={handleToggleArchiveVisible}
+            className="inline-flex items-center gap-2 rounded-md border border-stone-600 px-4 py-2 text-sm font-semibold text-stone-200 transition hover:border-stone-400 disabled:opacity-50"
+          >
+            {selectedEdition?.archive_visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            {selectedEdition?.archive_visible ? 'Nascondi dall\'archivio' : 'Mostra nell\'archivio'}
           </button>
         </div>
         <form

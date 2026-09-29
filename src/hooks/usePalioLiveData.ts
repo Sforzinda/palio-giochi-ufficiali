@@ -13,6 +13,7 @@ export interface PalioEdition {
   id: string;
   month: PalioMonth;
   year: number;
+  archive_visible?: boolean;
 }
 
 export interface PalioLiveControl {
@@ -113,7 +114,7 @@ export const getResultValue = (result: PalioEditionResult): string => {
 export const getResultPositionLabel = (result: PalioEditionResult): string =>
   result.position ? `${result.position}° posto` : 'Da classificare';
 
-function buildRanking(
+export function buildRanking(
   contrade: Contrada[],
   results: PalioEditionResult[],
   excludeGame?: PalioGame
