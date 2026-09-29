@@ -121,3 +121,12 @@ create index if not exists palio_judge_fixed_edition_idx on public.palio_judge_f
 alter table public.palio_judge_fixed enable row level security;
 create policy "palio_judge_fixed_manage" on public.palio_judge_fixed
   for all using (public.can_manage_palio_games()) with check (public.can_manage_palio_games());
+
+-- Giudice della gonna (cerchio): una sola persona per tutte le batterie, senza
+-- controlli di Contrada. Vive tra le figure fisse con ruolo 'gonna'.
+alter table public.palio_judge_fixed drop constraint if exists palio_judge_fixed_role_check;
+alter table public.palio_judge_fixed
+  add constraint palio_judge_fixed_role_check check (role in ('fantapalio', 'banco', 'gonna'));
+
+create unique index if not exists palio_judge_fixed_gonna_unique
+  on public.palio_judge_fixed (edition_id) where role = 'gonna';
