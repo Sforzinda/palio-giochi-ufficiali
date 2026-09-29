@@ -680,15 +680,15 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
   }
 
   // Elimina gli abbinamenti di una batteria, di un gioco o (senza scope)
-  // dell'intera edizione, figure fisse comprese. Gli extra valgono nello
-  // stesso ambito: quelli "per tutto il gioco" saltano solo da gioco in su.
+  // dell'intera edizione. Le figure fisse (FantaPalio, banco, gonna) non si
+  // toccano mai. Gli extra valgono nello stesso ambito: quelli "per tutto il
+  // gioco" saltano solo da gioco in su.
   async function handleClear(label: string, scope: { game?: PalioGame; heatNumber?: number } = {}) {
     if (!editionId) return;
     const inScope = assignments.filter(
       (a) => (!scope.game || a.game === scope.game) && (scope.heatNumber === undefined || a.heat_number === scope.heatNumber)
     );
-    const includeFixed = !scope.game;
-    const total = inScope.length + (includeFixed ? fixedAssignments.length : 0);
+    const total = inScope.length;
     if (total === 0) {
       setMessage('Nessun abbinamento da eliminare.');
       return;
@@ -698,12 +698,10 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
       let query = supabase.from('palio_judge_assignments').delete().eq('edition_id', editionId);
       if (scope.game) query = query.eq('game', scope.game);
       if (scope.heatNumber !== undefined) query = query.eq('heat_number', scope.heatNumber);
-      const result = await query;
-      if (result.error || !includeFixed) return result;
-      return supabase.from('palio_judge_fixed').delete().eq('edition_id', editionId);
+      return query;
     }, 'Errore eliminazione abbinamenti');
     if (ok) {
-      await Promise.all([fetchAssignments(), fetchFixed()]);
+      await fetchAssignments();
       setMessage(`Eliminati ${total} abbinamenti.`);
     }
   }
@@ -990,8 +988,8 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
               </button>
               <button
                 className="inline-flex items-center gap-1.5 rounded-md border border-red-800 px-3 py-1.5 text-sm font-semibold text-red-300 hover:border-red-500 disabled:opacity-50"
-                disabled={busy || assignments.length + fixedAssignments.length === 0}
-                onClick={() => handleClear('tutti quelli dell\'edizione, figure fisse comprese')}
+                disabled={busy || assignments.length === 0}
+                onClick={() => handleClear('tutti quelli dell\'edizione (le figure fisse restano)')}
                 type="button"
               >
                 <Trash2 className="h-4 w-4" />

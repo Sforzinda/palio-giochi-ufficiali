@@ -4,12 +4,17 @@ import type { Contrada, PalioEdition, PalioEditionHeat, PalioGame } from '../hoo
 // scheda riepilogativa e delle schede della finale. jsPDF è caricato in modo
 // dinamico: pesa solo quando si scarica il PDF.
 
-/** Titolare abbinato a una corsia di una batteria (cronometrista o giudice delle penalità). */
+/**
+ * Giudice abbinato (cronometrista o giudice delle penalità): titolare di una
+ * corsia di una batteria oppure extra (di una batteria, o di tutto il gioco se
+ * heatNumber è null; gli extra non hanno corsia).
+ */
 export interface JudgeSheetAssignment {
   game: PalioGame;
-  heatNumber: number;
+  heatNumber: number | null;
+  isExtra: boolean;
   judgeName: string;
-  lane: number;
+  lane: number | null;
   role: string;
 }
 
@@ -99,8 +104,23 @@ function getJudgeName(
 ): string | undefined {
   const role = kind === 'tempi' ? 'cronometrista' : 'giudice';
   return input.judgeAssignments?.find(
-    (a) => a.game === game && a.heatNumber === heatNumber && a.lane === lane && a.role === role
+    (a) => !a.isExtra && a.game === game && a.heatNumber === heatNumber && a.lane === lane && a.role === role
   )?.judgeName;
+}
+
+// Extra dello stesso ruolo validi per la batteria o per tutto il gioco.
+function getExtraJudgeNames(
+  input: Pick<JudgeSheetsInput, 'judgeAssignments'>,
+  game: PalioGame,
+  heatNumber: number,
+  kind: SheetKind
+): string[] {
+  const role = kind === 'tempi' ? 'cronometrista' : 'giudice';
+  return Array.from(new Set(
+    (input.judgeAssignments ?? [])
+      .filter((a) => a.isExtra && a.game === game && a.role === role && (a.heatNumber === null || a.heatNumber === heatNumber))
+      .map((a) => a.judgeName)
+  ));
 }
 
 export function drawPageHeader(doc: PdfDoc, headerLines: [string, string]) {
@@ -117,7 +137,7 @@ function drawJudgeSheet(
   headerLines: [string, string],
   title: string,
   kind: SheetKind,
-  rows: { judgeName?: string; label: string; noPlayers?: boolean }[]
+  rows: { extraJudgeNames?: string[]; judgeName?: string; label: string; noPlayers?: boolean }[]
 ) {
   drawPageHeader(doc, headerLines);
 
@@ -166,6 +186,16 @@ function drawJudgeSheet(
     judgeLines.forEach((line, lineIndex) => {
       doc.text(line, TABLE_X + NAME_COLUMN_WIDTH / 2, judgeTop + lineIndex * JUDGE_LINE_HEIGHT, { align: 'center' });
     });
+
+    if (row.extraJudgeNames && row.extraJudgeNames.length > 0) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      const extraLines: string[] = doc.splitTextToSize(
+        `${kind === 'tempi' ? 'Cronometristi extra' : 'Giudici extra'}: ${row.extraJudgeNames.join(', ')}`,
+        TABLE_WIDTH - NAME_COLUMN_WIDTH - 6
+      );
+      doc.text(extraLines.slice(0, 3), TABLE_X + NAME_COLUMN_WIDTH + 3, y + 6);
+    }
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(12);
@@ -293,6 +323,7 @@ export async function downloadJudgeSheetsPdf(input: JudgeSheetsInput, games: Pal
           `${gameSheetTitles[game]} - CORSIA ${lane.laneNumber}`,
           kind,
           lane.rows.map((row) => ({
+            extraJudgeNames: getExtraJudgeNames(input, game, row.heatNumber, kind),
             judgeName: getJudgeName(input, game, row.heatNumber, lane.laneNumber, kind),
             label: row.contradaName,
             noPlayers: row.noPlayers,
@@ -314,7 +345,7 @@ export async function downloadFinaleSheetsPdf(input: Omit<JudgeSheetsInput, 'con
     for (let lane = 1; lane <= FINALE_LANES; lane += 1) {
       if (kindIndex > 0 || lane > 1) doc.addPage();
       drawJudgeSheet(doc, headerLines, `FINALE - CORSIA ${lane}`, kind, [
-        { judgeName: getJudgeName(input, 'finale', 1, lane, kind), label: '' },
+        { extraJudgeNames: getExtraJudgeNames(input, 'finale', 1, kind), judgeName: getJudgeName(input, 'finale', 1, lane, kind), label: '' },
       ]);
     }
   });

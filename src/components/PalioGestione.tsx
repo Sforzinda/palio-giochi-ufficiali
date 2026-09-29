@@ -259,24 +259,30 @@ function PalioResultsInputContent() {
 
   const allDrawsRevealed = drawableHeatCount > 0 && revealedDrawCount >= drawableHeatCount;
 
-  // Titolari abbinati alle corsie (con nome) da stampare sulle schede giudice.
-  // Se la lettura fallisce le schede si generano comunque, senza i nomi.
+  // Titolari e extra (con nome) da stampare sulle schede giudice. Se la lettura
+  // fallisce le schede si generano comunque, senza i nomi.
   const fetchJudgeSheetAssignments = async (editionId: string): Promise<JudgeSheetAssignment[]> => {
     const { data, error } = await supabase
       .from('palio_judge_assignments')
-      .select('game, heat_number, lane, role, palio_judges(name)')
-      .eq('edition_id', editionId)
-      .eq('is_extra', false)
-      .not('lane', 'is', null);
+      .select('game, heat_number, lane, role, is_extra, palio_judges(name)')
+      .eq('edition_id', editionId);
     if (error) {
       console.error('Error fetching judge assignments for sheets:', error);
       return [];
     }
-    return ((data ?? []) as unknown as { game: PalioGame; heat_number: number; lane: number; role: string; palio_judges: { name: string } | null }[])
-      .filter((row) => row.palio_judges)
+    return ((data ?? []) as unknown as {
+      game: PalioGame;
+      heat_number: number | null;
+      is_extra: boolean;
+      lane: number | null;
+      palio_judges: { name: string } | null;
+      role: string;
+    }[])
+      .filter((row) => row.palio_judges && (row.is_extra || row.lane !== null))
       .map((row) => ({
         game: row.game,
         heatNumber: row.heat_number,
+        isExtra: row.is_extra,
         judgeName: row.palio_judges?.name ?? '',
         lane: row.lane,
         role: row.role,
