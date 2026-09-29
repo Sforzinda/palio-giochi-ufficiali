@@ -61,6 +61,67 @@ function getLaneNumbers(heats: PalioEditionHeat[], game: PalioGame, heatNumber: 
   )).sort((a, b) => a - b);
 }
 
+const UNAVAILABLE_COST = 1e7;
+
+// Assegnazione a costo minimo (algoritmo ungherese) tra posti (righe) e
+// giudici (colonne). Coppie non ammesse costano UNAVAILABLE_COST, molto più di
+// qualunque somma di costi reali: così si riempie prima il maggior numero di
+// posti possibile e solo poi si ottimizzano corsia, preferenza e carico.
+function solveAssignment(cost: number[][]): number[] {
+  const n = cost.length;
+  if (n === 0) return [];
+  const realColumns = cost[0].length;
+  const m = Math.max(realColumns, n);
+  const at = (i: number, j: number) => (j < realColumns ? cost[i][j] : UNAVAILABLE_COST);
+  const u = new Array<number>(n + 1).fill(0);
+  const v = new Array<number>(m + 1).fill(0);
+  const p = new Array<number>(m + 1).fill(0);
+  const way = new Array<number>(m + 1).fill(0);
+  for (let i = 1; i <= n; i += 1) {
+    p[0] = i;
+    let j0 = 0;
+    const minv = new Array<number>(m + 1).fill(Infinity);
+    const used = new Array<boolean>(m + 1).fill(false);
+    do {
+      used[j0] = true;
+      const i0 = p[j0];
+      let delta = Infinity;
+      let j1 = 0;
+      for (let j = 1; j <= m; j += 1) {
+        if (used[j]) continue;
+        const current = at(i0 - 1, j - 1) - u[i0] - v[j];
+        if (current < minv[j]) {
+          minv[j] = current;
+          way[j] = j0;
+        }
+        if (minv[j] < delta) {
+          delta = minv[j];
+          j1 = j;
+        }
+      }
+      for (let j = 0; j <= m; j += 1) {
+        if (used[j]) {
+          u[p[j]] += delta;
+          v[j] -= delta;
+        } else {
+          minv[j] -= delta;
+        }
+      }
+      j0 = j1;
+    } while (p[j0] !== 0);
+    do {
+      const j1 = way[j0];
+      p[j0] = p[j1];
+      j0 = j1;
+    } while (j0 !== 0);
+  }
+  const result = new Array<number>(n).fill(-1);
+  for (let j = 1; j <= m; j += 1) {
+    if (p[j] !== 0) result[p[j] - 1] = j - 1;
+  }
+  return result;
+}
+
 const baseJudgeRoles: JudgeRole[] = ['cronometrista', 'giudice'];
 
 // Giudice di campo e giudice della gonna esistono solo nel cerchio; il
@@ -238,6 +299,7 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
     fetchFixed();
   }, [fetchAssignments, fetchFixed]);
 
+  const contradaNames = useMemo(() => new Map(contrade.map((contrada) => [contrada.id, contrada.name])), [contrade]);
   const judgeNames = useMemo(() => new Map(judges.map((judge) => [judge.id, judge.name])), [judges]);
 
   const heatNumbers = useMemo(() => getHeatNumbers(heats, game), [game, heats]);
@@ -261,6 +323,14 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
     });
     return lanes;
   }, [assignments]);
+
+  // Contrada (e se è senza giocatori) in una corsia di una batteria; per
+  // melocotogno e finale le corsie non hanno Contrade note.
+  function getLaneContrada(heatNumber: number, lane: number): { name: string; noPlayers: boolean } | null {
+    if (game === 'melocotogno' || game === 'finale') return null;
+    const heat = heats.find((h) => h.game === game && h.heat_number === heatNumber && h.display_order === lane);
+    return heat ? { name: contradaNames.get(heat.contrada_id) ?? 'Contrada', noPlayers: heat.no_players } : null;
+  }
 
   // Contrade che gareggiano in una batteria (o in tutto il gioco se heatNumber
   // è null). Melocotogno e finale non hanno batterie note: le finaliste si
@@ -351,13 +421,14 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
     }
   }
 
-  // Riempie solo i posti titolari ancora vuoti (non tocca gli abbinamenti già
-  // fatti), corsia per corsia. Per ogni posto sceglie tra i giudici liberi in
-  // quella batteria e senza conflitto di Contrada. Ordine: prima chi è già
-  // stato assegnato a quella corsia (un giudice non cambia corsia, se
-  // possibile), poi chi non ha ancora una corsia, infine chi dovrebbe
-  // cambiarla; poi la preferenza (giusta, indifferente, opposta) e, a parità,
-  // chi ha meno incarichi nell'edizione.
+  // Riempie i posti titolari ancora vuoti (non tocca gli abbinamenti già
+  // fatti): l'obiettivo è coprire tutte le corsie con tutti i ruoli. Per ogni
+  // batteria risolve un'assegnazione a costo minimo tra posti (corsia x ruolo)
+  // e giudici, escludendo chi è già in quella batteria, è figura fissa o ha una
+  // Contrada che gareggia lì. Prima si massimizzano i posti coperti, poi si
+  // preferisce: chi resta sulla stessa corsia (un giudice non cambia corsia,
+  // se possibile) o non ne ha ancora una, poi la preferenza (giusta,
+  // indifferente, opposta) e, a parità, chi ha meno incarichi.
   async function handleAutoAssign() {
     if (!editionId) return;
     const load = new Map(assignmentCounts);
@@ -366,7 +437,7 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
       if (!a.is_extra && a.lane !== null && !lockedLane.has(a.judge_id)) lockedLane.set(a.judge_id, a.lane);
     });
     const planned: { edition_id: string; game: PalioGame; heat_number: number; is_extra: false; judge_id: string; lane: number; role: JudgeRole }[] = [];
-    let unfilled = 0;
+    const missing: string[] = [];
     let againstPreference = 0;
     let laneChanges = 0;
 
@@ -376,46 +447,57 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
           assignments.filter((a) => a.game === g && (a.heat_number === heatNumber || a.heat_number === null)).map((a) => a.judge_id)
         );
         const participants = getParticipantContradaIds(g, heatNumber);
-        for (const lane of getLaneNumbers(heats, g, heatNumber)) {
-          for (const role of getJudgeRoles(g)) {
-            if (assignments.some((a) => a.game === g && !a.is_extra && a.heat_number === heatNumber && a.lane === lane && a.role === role)) continue;
-            const category: JudgePreference = role === 'cronometrista' ? 'cronometrista' : 'giudice';
-            const preferenceRank = (judge: Judge) => (judge.preferred_role === category ? 0 : judge.preferred_role === null ? 1 : 2);
-            const laneRank = (judge: Judge) => {
-              const locked = lockedLane.get(judge.id);
-              return locked === undefined ? 1 : locked === lane ? 0 : 2;
-            };
-            const [best] = judges
-              .filter((judge) => !taken.has(judge.id) && !fixedJudgeIds.has(judge.id) && !judge.contrada_ids.some((id) => participants.has(id)))
-              .sort((a, b) =>
-                laneRank(a) - laneRank(b)
-                || preferenceRank(a) - preferenceRank(b)
-                || (load.get(a.id) ?? 0) - (load.get(b.id) ?? 0)
-                || a.name.localeCompare(b.name, 'it'));
-            if (!best) {
-              unfilled += 1;
-              continue;
-            }
-            if (laneRank(best) === 2) laneChanges += 1;
-            if (preferenceRank(best) === 2) againstPreference += 1;
-            if (!lockedLane.has(best.id)) lockedLane.set(best.id, lane);
-            taken.add(best.id);
-            load.set(best.id, (load.get(best.id) ?? 0) + 1);
-            planned.push({ edition_id: editionId, game: g, heat_number: heatNumber, is_extra: false, judge_id: best.id, lane, role });
-          }
+        const slots = getLaneNumbers(heats, g, heatNumber)
+          .flatMap((lane) => getJudgeRoles(g).map((role) => ({ lane, role })))
+          .filter(({ lane, role }) => !assignments.some(
+            (a) => a.game === g && !a.is_extra && a.heat_number === heatNumber && a.lane === lane && a.role === role
+          ));
+        if (slots.length === 0 || judges.length === 0) {
+          slots.forEach(({ lane, role }) => missing.push(`${palioGameLabels[g]} batt. ${heatNumber} corsia ${lane} (${roleLabels[role]})`));
+          continue;
         }
+
+        const preferenceRank = (judge: Judge, role: JudgeRole) => {
+          const category: JudgePreference = role === 'cronometrista' ? 'cronometrista' : 'giudice';
+          return judge.preferred_role === category ? 0 : judge.preferred_role === null ? 1 : 2;
+        };
+        const laneRank = (judge: Judge, lane: number) => {
+          const locked = lockedLane.get(judge.id);
+          return locked === undefined ? 1 : locked === lane ? 0 : 2;
+        };
+        const cost = slots.map(({ lane, role }) => judges.map((judge, index) =>
+          taken.has(judge.id) || fixedJudgeIds.has(judge.id) || judge.contrada_ids.some((id) => participants.has(id))
+            ? UNAVAILABLE_COST
+            : laneRank(judge, lane) * 10000 + preferenceRank(judge, role) * 1000 + Math.min(load.get(judge.id) ?? 0, 99) * 10 + index / 1000
+        ));
+        const matching = solveAssignment(cost);
+
+        slots.forEach(({ lane, role }, slotIndex) => {
+          const judgeIndex = matching[slotIndex];
+          if (judgeIndex < 0 || judgeIndex >= judges.length || cost[slotIndex][judgeIndex] >= UNAVAILABLE_COST) {
+            missing.push(`${palioGameLabels[g]} batt. ${heatNumber} corsia ${lane} (${roleLabels[role]})`);
+            return;
+          }
+          const judge = judges[judgeIndex];
+          if (laneRank(judge, lane) === 2) laneChanges += 1;
+          if (preferenceRank(judge, role) === 2) againstPreference += 1;
+          if (!lockedLane.has(judge.id)) lockedLane.set(judge.id, lane);
+          load.set(judge.id, (load.get(judge.id) ?? 0) + 1);
+          planned.push({ edition_id: editionId, game: g, heat_number: heatNumber, is_extra: false, judge_id: judge.id, lane, role });
+        });
       }
     }
 
+    const missingNote = missing.length > 0
+      ? `${missing.length} posti rimasti vuoti (mancano giudici disponibili o senza conflitti): ${missing.slice(0, 5).join('; ')}${missing.length > 5 ? '…' : ''}`
+      : '';
     if (planned.length === 0) {
-      setMessage(unfilled > 0
-        ? `Nessun abbinamento possibile: ${unfilled} posti vuoti senza giudici disponibili.`
-        : 'Nessun posto vuoto da riempire.');
+      setMessage(missingNote ? `Nessun abbinamento possibile: ${missingNote}.` : 'Nessun posto vuoto da riempire.');
       return;
     }
     if (await run(() => supabase.from('palio_judge_assignments').insert(planned), 'Errore abbinamento automatico')) {
       const notes = [
-        unfilled > 0 ? `${unfilled} posti rimasti vuoti (giudici insufficienti o in conflitto)` : '',
+        missingNote,
         laneChanges > 0 ? `${laneChanges} giudici hanno dovuto cambiare corsia` : '',
         againstPreference > 0 ? `${againstPreference} contro la preferenza` : '',
       ].filter(Boolean);
@@ -802,9 +884,20 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
                 {heatNumbers.map((heatNumber) => (
                   <div key={heatNumber} className="space-y-3 rounded-md border border-stone-800 bg-stone-950 p-3">
                     <div className="flex items-center justify-between gap-2">
-                      <h3 className="text-sm font-semibold text-stone-100">
-                        {game === 'melocotogno' || game === 'finale' ? `${palioGameLabels[game]} (prova unica)` : `Batteria ${heatNumber}`}
-                      </h3>
+                      <div>
+                        <h3 className="text-sm font-semibold text-stone-100">
+                          {game === 'melocotogno' || game === 'finale' ? `${palioGameLabels[game]} (prova unica)` : `Batteria ${heatNumber}`}
+                        </h3>
+                        {game !== 'melocotogno' && game !== 'finale' && (
+                          <p className="text-xs text-stone-400">
+                            {heats
+                              .filter((h) => h.game === game && h.heat_number === heatNumber)
+                              .sort((a, b) => a.display_order - b.display_order)
+                              .map((h) => contradaNames.get(h.contrada_id) ?? 'Contrada')
+                              .join(' · ')}
+                          </p>
+                        )}
+                      </div>
                       <button
                         className="inline-flex items-center gap-1 rounded-md border border-stone-700 px-2 py-1 text-xs font-semibold text-stone-300 hover:border-red-500 hover:text-red-300 disabled:opacity-50"
                         disabled={busy || !gameAssignments.some((a) => a.heat_number === heatNumber)}
@@ -817,7 +910,17 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
                     </div>
                     {getLaneNumbers(heats, game, heatNumber).map((lane) => (
                       <div key={lane} className="space-y-2 rounded-md border border-stone-800 bg-stone-900/60 p-2">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-palio-300">Corsia {lane}</p>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-palio-300">
+                          Corsia {lane}
+                          {(() => {
+                            const laneContrada = getLaneContrada(heatNumber, lane);
+                            return laneContrada ? (
+                              <span className="ml-2 normal-case tracking-normal text-stone-200">
+                                {laneContrada.name}{laneContrada.noPlayers ? ' (senza giocatori)' : ''}
+                              </span>
+                            ) : null;
+                          })()}
+                        </p>
                         {judgeRoles.map((role) => {
                           const current = gameAssignments.find((a) => !a.is_extra && a.heat_number === heatNumber && a.lane === lane && a.role === role);
                           const otherLanes = current
