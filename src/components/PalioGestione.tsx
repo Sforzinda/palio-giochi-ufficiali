@@ -1,5 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle, Clock, Eye, EyeOff, Flag, Minus, Plus, PlusCircle, Repeat, RotateCcw, Save, Send, Trophy, Users as UsersIcon, Utensils } from 'lucide-react';
+import { AlertCircle, CheckCircle, Clock, Download, Eye, EyeOff, Flag, Minus, Plus, PlusCircle, Repeat, RotateCcw, Save, Send, Trophy, Users as UsersIcon, Utensils } from 'lucide-react';
 import { getSupabaseClient } from '../config';
 import { AuspiciGestioneContent } from './AuspiciGestione';
 import { PalioAuthGate } from './PalioAuthGate';
@@ -11,8 +11,10 @@ import {
   type PalioEditionHeat,
   type PalioGame,
   type PalioLiveControl,
+  getPalioGamesForMonth,
   palioGameLabels as liveGameLabels,
 } from '../hooks/usePalioLiveData';
+import { downloadFinaleSheetsPdf, downloadJudgeSheetsPdf } from '../lib/palio-judge-sheets';
 import {
   type PalioEditionResultInput,
   calculatePalioRows,
@@ -136,6 +138,7 @@ function PalioResultsInputContent() {
   const [creatingEdition, setCreatingEdition] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [heatsStatusMessage, setHeatsStatusMessage] = useState('');
+  const [generatingSheets, setGeneratingSheets] = useState<'giudici' | 'finale' | null>(null);
   const [activeSection, setActiveSection] = useState<'estrazioni' | 'giochi' | 'auspici' | 'utenti'>('estrazioni');
   const { isAdmin } = usePalioAuth();
   const [resultsSortMode, setResultsSortMode] = useState<'alfabetico' | 'batteria' | 'corsia'>('alfabetico');
@@ -250,6 +253,29 @@ function PalioResultsInputContent() {
     [heats]
   );
   const revealedDrawCount = Math.min(Math.max(selectedLiveControl?.draw_revealed_count ?? 0, 0), drawableHeatCount);
+
+  const allDrawsRevealed = drawableHeatCount > 0 && revealedDrawCount >= drawableHeatCount;
+
+  const handleDownloadSheets = async (type: 'giudici' | 'finale') => {
+    if (!selectedEdition) return;
+    setGeneratingSheets(type);
+    try {
+      const liveTitle = selectedLiveControl?.live_title?.trim() || formatPalioEditionLabel(selectedEdition);
+      if (type === 'giudici') {
+        await downloadJudgeSheetsPdf(
+          { contrade, edition: selectedEdition, heats, liveTitle },
+          getPalioGamesForMonth(selectedEdition.month)
+        );
+      } else {
+        await downloadFinaleSheetsPdf({ edition: selectedEdition, liveTitle });
+      }
+    } catch (error) {
+      console.error('Error generating judge sheets:', error);
+      setRegiaStatusMessage('Errore nella generazione del PDF delle schede');
+    } finally {
+      setGeneratingSheets(null);
+    }
+  };
 
   // Se non è ancora selezionata un'edizione, precompila con quella
   // attualmente in diretta (se c'è).
@@ -1218,6 +1244,36 @@ function PalioResultsInputContent() {
               </p>
             )}
           </div>
+
+          {selectedEdition && (
+            <div className="rounded-lg border border-stone-800 bg-stone-900 p-4">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-stone-300">Schede giudici</h2>
+              <p className="mt-1 text-sm text-stone-500">
+                PDF con il riepilogo di giochi e corsie e, per ogni corsia, la scheda tempi e la scheda penalità già compilate con le contrade.
+                Disponibile quando tutte le estrazioni sono state inviate.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={!allDrawsRevealed || generatingSheets !== null}
+                  onClick={() => handleDownloadSheets('giudici')}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  <Download className="h-4 w-4" />
+                  {generatingSheets === 'giudici' ? 'Generazione...' : 'Scarica schede giudici'}
+                </button>
+                <button
+                  type="button"
+                  disabled={generatingSheets !== null}
+                  onClick={() => handleDownloadSheets('finale')}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-stone-600 px-3 py-1.5 text-sm font-semibold text-stone-200 hover:border-stone-400 disabled:opacity-50"
+                >
+                  <Download className="h-4 w-4" />
+                  {generatingSheets === 'finale' ? 'Generazione...' : 'Scarica scheda finale'}
+                </button>
+              </div>
+            </div>
+          )}
 
           {availableHeatGames.length > 0 && (
             <div className="rounded-lg border border-stone-800 bg-stone-900 p-4">
