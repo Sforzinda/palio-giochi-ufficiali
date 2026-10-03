@@ -45,7 +45,7 @@ export const auspiciProvaDirection: Record<AuspiciProva, 'asc' | 'desc'> = {
 export const auspiciProvaRawScoreLabels: Record<AuspiciProva, string> = {
   mercante: 'Valore stimato da ciascuna squadra per le 5 prove: lo scarto dal valore di riferimento e la classifica si calcolano automaticamente (vince il totale più basso)',
   memoria: 'Sequenza di 20 lettere indicata da ciascuna squadra: le lettere in posizione corretta si contano automaticamente confrontando con la sequenza di riferimento (vince il punteggio più alto)',
-  investitura: 'Tempo torre, altezza castello di carte ed elementi corretti/errati dell’horror vacui: piazzamento per ciascuna microabilità (par merito compreso) e somma calcolati automaticamente (vince il totale più basso)',
+  investitura: 'Altezza torre, altezza castello di carte ed elementi corretti/errati dell’horror vacui: piazzamento per ciascuna microabilità (par merito compreso) e somma calcolati automaticamente (vince il totale più basso)',
   tiro: 'Bersagli colpiti: il punteggio (1+2+3+4+5) è calcolato automaticamente (vince il più alto)',
   giuramento: 'Punti 0-5 di ciascun giudice sui 4 criteri: il totale, con eventuale penalità tempo, è calcolato automaticamente (vince il più alto)',
 };
@@ -231,7 +231,7 @@ export const auspiciProvaFields: Partial<Record<AuspiciProva, AuspiciProvaField[
     { key: 'g3_spirito', kind: 'score', label: 'Giudice 3 · spirito', max: 5 },
   ],
   investitura: [
-    { direction: 'asc', key: 'torre', kind: 'metric', label: 'Tempo montaggio torre', unit: 's' },
+    { direction: 'desc', key: 'torre', kind: 'metric', label: 'Altezza torre', unit: 'cm' },
     { direction: 'desc', key: 'castello', kind: 'metric', label: 'Altezza castello di carte', unit: 'cm' },
     { key: AUSPICI_HORROR_VACUI_ERRORI_KEY, kind: 'count', label: 'Horror vacui · elementi errati' },
     { key: AUSPICI_HORROR_VACUI_ORDINE_KEY, kind: 'count', label: 'Horror vacui · ordine di consegna (facoltativo)' },
@@ -427,7 +427,7 @@ export function calculateAuspiciRows(
     // Ogni microabilità (torre, castello, horror vacui) ha la propria
     // classifica indipendente; il piazzamento finale è la somma dei tre
     // piazzamenti (regolamento punto 9.3.5).
-    const torreDirection = fields?.find((field) => field.key === 'torre')?.direction ?? 'asc';
+    const torreDirection = fields?.find((field) => field.key === 'torre')?.direction ?? 'desc';
     const castelloDirection = fields?.find((field) => field.key === 'castello')?.direction ?? 'desc';
     const torreRanks = rankAuspiciValues(
       rows.map((row) => ({ participant_id: row.participant_id, value: parsePalioNumber(row.detail.torre ?? '') })),
