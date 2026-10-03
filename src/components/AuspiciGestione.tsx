@@ -67,7 +67,6 @@ export function AuspiciGestioneContent() {
   const [results, setResults] = useState<AuspiciResultInput[]>([]);
   const [reference, setReference] = useState<Record<string, string>>({});
   const [horrorVacuiChecklistParticipantId, setHorrorVacuiChecklistParticipantId] = useState<string | null>(null);
-  const [horrorVacuiSearch, setHorrorVacuiSearch] = useState('');
   const [adjustments, setAdjustments] = useState<AuspiciAdjustment[]>([]);
   const [carte, setCarte] = useState<AuspiciCarta[]>([]);
   const [newAdjustment, setNewAdjustment] = useState({ participantId: '', points: '', reason: '' });
@@ -1047,30 +1046,15 @@ export function AuspiciGestioneContent() {
                           {isHorrorVacuiChecklistOpen && (
                             <tr className="border-b border-stone-800/60 bg-stone-950/60">
                               <td className="p-3" colSpan={20}>
-                                <div className="mb-2 flex flex-wrap items-center gap-3">
-                                  <div className="text-xs font-semibold uppercase tracking-wide text-amber-300">
-                                    Checklist horror vacui — {name} ({checkedHorrorVacuiItems.length} corretti)
-                                  </div>
-                                  <input
-                                    aria-label="Cerca nella checklist horror vacui"
-                                    className="w-full max-w-xs rounded border border-stone-700 bg-stone-800 px-2 py-1 text-xs text-stone-100"
-                                    onChange={(e) => setHorrorVacuiSearch(e.target.value)}
-                                    placeholder="Cerca…"
-                                    type="search"
-                                    value={horrorVacuiSearch}
-                                  />
+                                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-300">
+                                  Checklist horror vacui — {name} ({checkedHorrorVacuiItems.length} corretti)
                                 </div>
                                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                                  {auspiciHorrorVacuiCatalog.map((category, categoryIndex) => {
-                                    const query = horrorVacuiSearch.trim().toLowerCase();
-                                    const categoryMatches = category.category.toLowerCase().includes(query);
-                                    if (query && !categoryMatches && !category.items.some((item) => item.toLowerCase().includes(query))) return null;
-                                    return (
+                                  {auspiciHorrorVacuiCatalog.map((category, categoryIndex) => (
                                     <div key={category.category}>
                                       <p className="mb-1 text-[11px] font-semibold uppercase text-stone-400">{category.category}</p>
                                       <ul className="space-y-0.5">
                                         {category.items.map((item, itemIndex) => {
-                                          if (query && !categoryMatches && !item.toLowerCase().includes(query)) return null;
                                           const itemId = `${categoryIndex}:${itemIndex}`;
                                           const checked = checkedHorrorVacuiItems.includes(itemId);
                                           return (
@@ -1090,8 +1074,7 @@ export function AuspiciGestioneContent() {
                                         })}
                                       </ul>
                                     </div>
-                                    );
-                                  })}
+                                  ))}
                                 </div>
                               </td>
                             </tr>
