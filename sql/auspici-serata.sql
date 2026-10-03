@@ -170,3 +170,13 @@ create policy "auspici_live_controls_public_read" on public.auspici_live_control
   for select using (true);
 create policy "auspici_live_controls_manage_write" on public.auspici_live_controls
   for all using (public.can_manage_palio_games()) with check (public.can_manage_palio_games());
+
+-- Realtime: la classifica pubblica si aggiorna tramite postgres_changes, quindi
+-- le tabelle devono far parte della publication supabase_realtime.
+alter publication supabase_realtime add table
+  public.auspici_editions,
+  public.auspici_participants,
+  public.auspici_results,
+  public.auspici_adjustments,
+  public.auspici_carte,
+  public.auspici_live_controls;

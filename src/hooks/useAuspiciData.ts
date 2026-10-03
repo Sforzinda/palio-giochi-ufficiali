@@ -251,6 +251,9 @@ export function useAuspiciData(channelName: string): AuspiciData {
 
   useEffect(() => {
     fetchData();
+    // Rete di sicurezza se gli eventi realtime non arrivano.
+    const interval = setInterval(fetchData, 15000);
+    return () => clearInterval(interval);
   }, [fetchData]);
 
   useEffect(() => {
