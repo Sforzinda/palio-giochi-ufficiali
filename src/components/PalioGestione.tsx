@@ -15,7 +15,7 @@ import {
   getPalioGamesForMonth,
   palioGameLabels as liveGameLabels,
 } from '../hooks/usePalioLiveData';
-import { OUTDATED_APP_MESSAGE, type JudgeSheetAssignment, downloadFinaleSheetsPdf, downloadJudgeSheetsPdf } from '../lib/palio-judge-sheets';
+import { OUTDATED_APP_MESSAGE, type JudgeSheetAssignment, type JudgeSheetFixedRole, downloadFinaleSheetsPdf, downloadJudgeSheetsPdf } from '../lib/palio-judge-sheets';
 import { downloadResultsPdf, type PalioResultsPdfResult } from '../lib/palio-results-pdf';
 import {
   type PalioEditionResultInput,
@@ -268,23 +268,32 @@ function PalioResultsInputContent() {
 
   const allDrawsRevealed = drawableHeatCount > 0 && revealedDrawCount >= drawableHeatCount;
 
-  // Titolari e extra (con nome) da stampare sulle schede giudice. Se la lettura
-  // fallisce le schede si generano comunque, senza i nomi.
-  const fetchJudgeSheetAssignments = async (editionId: string): Promise<JudgeSheetAssignment[]> => {
-    const { data, error } = await supabase
-      .from('palio_judge_assignments')
-      .select('game, heat_number, lane, role, is_extra, palio_judges(name)')
-      .eq('edition_id', editionId);
-    if (error) {
-      console.error('Error fetching judge assignments for sheets:', error);
-      return [];
-    }
-    return ((data ?? []) as unknown as {
+  // Titolari, extra e figure fisse (con nome e preferenza) da stampare sulle
+  // schede giudice. Se la lettura fallisce le schede si generano comunque, senza i nomi.
+  const fetchJudgeSheetAssignments = async (
+    editionId: string
+  ): Promise<{ fixedRoles: JudgeSheetFixedRole[]; judgeAssignments: JudgeSheetAssignment[] }> => {
+    type JudgeInfo = { name: string; preferred_role: 'cronometrista' | 'giudice' | null } | null;
+    const [assignmentsResult, fixedResult] = await Promise.all([
+      supabase
+        .from('palio_judge_assignments')
+        .select('game, heat_number, lane, role, is_extra, judge_id, palio_judges(name, preferred_role)')
+        .eq('edition_id', editionId),
+      supabase
+        .from('palio_judge_fixed')
+        .select('role, judge_id, palio_judges(name, preferred_role)')
+        .eq('edition_id', editionId),
+    ]);
+    if (assignmentsResult.error) console.error('Error fetching judge assignments for sheets:', assignmentsResult.error);
+    if (fixedResult.error) console.error('Error fetching fixed judges for sheets:', fixedResult.error);
+
+    const judgeAssignments = ((assignmentsResult.data ?? []) as unknown as {
       game: PalioGame;
       heat_number: number | null;
       is_extra: boolean;
+      judge_id: string;
       lane: number | null;
-      palio_judges: { name: string } | null;
+      palio_judges: JudgeInfo;
       role: string;
     }[])
       .filter((row) => row.palio_judges && (row.is_extra || row.lane !== null))
@@ -292,10 +301,21 @@ function PalioResultsInputContent() {
         game: row.game,
         heatNumber: row.heat_number,
         isExtra: row.is_extra,
+        judgeId: row.judge_id,
         judgeName: row.palio_judges?.name ?? '',
         lane: row.lane,
+        preferredRole: row.palio_judges?.preferred_role ?? null,
         role: row.role,
       }));
+    const fixedRoles = ((fixedResult.data ?? []) as unknown as { judge_id: string; palio_judges: JudgeInfo; role: string }[])
+      .filter((row) => row.palio_judges)
+      .map((row) => ({
+        judgeId: row.judge_id,
+        judgeName: row.palio_judges?.name ?? '',
+        preferredRole: row.palio_judges?.preferred_role ?? null,
+        role: row.role,
+      }));
+    return { fixedRoles, judgeAssignments };
   };
 
   const handleDownloadSheets = async (type: 'giudici' | 'finale') => {
@@ -303,10 +323,10 @@ function PalioResultsInputContent() {
     setGeneratingSheets(type);
     try {
       const liveTitle = selectedLiveControl?.live_title?.trim() || formatPalioEditionLabel(selectedEdition);
-      const judgeAssignments = await fetchJudgeSheetAssignments(selectedEdition.id);
+      const { fixedRoles, judgeAssignments } = await fetchJudgeSheetAssignments(selectedEdition.id);
       if (type === 'giudici') {
         await downloadJudgeSheetsPdf(
-          { contrade, edition: selectedEdition, heats, judgeAssignments, liveTitle },
+          { contrade, edition: selectedEdition, fixedRoles, heats, judgeAssignments, liveTitle },
           getPalioGamesForMonth(selectedEdition.month)
         );
       } else {

@@ -13,14 +13,25 @@ export interface JudgeSheetAssignment {
   game: PalioGame;
   heatNumber: number | null;
   isExtra: boolean;
+  judgeId?: string;
   judgeName: string;
   lane: number | null;
+  preferredRole?: 'cronometrista' | 'giudice' | null;
+  role: string;
+}
+
+/** Figura fissa dell'edizione (gonna, FantaPalio, banco): vale per tutto il Palio. */
+export interface JudgeSheetFixedRole {
+  judgeId?: string;
+  judgeName: string;
+  preferredRole?: 'cronometrista' | 'giudice' | null;
   role: string;
 }
 
 interface JudgeSheetsInput {
   contrade: Contrada[];
   edition: PalioEdition;
+  fixedRoles?: JudgeSheetFixedRole[];
   heats: PalioEditionHeat[];
   judgeAssignments?: JudgeSheetAssignment[];
   liveTitle: string;
@@ -293,6 +304,205 @@ function drawSummaryPage(doc: PdfDoc, input: JudgeSheetsInput, games: PalioGame[
   });
 }
 
+const fixedRoleLabels: Record<string, string> = { banco: 'Banco', fantapalio: 'FantaPalio', gonna: 'Gonna' };
+const preferenceLabels = { cronometrista: 'Cronometrista', giudice: 'Giudice' };
+const SUMMARY_MARGIN = 8;
+const SUMMARY_TABLE_WIDTH = PAGE_WIDTH - SUMMARY_MARGIN * 2;
+const SUMMARY_NAME_WIDTH = 36;
+const SUMMARY_PREF_WIDTH = 22;
+const SUMMARY_FIRST_TOP = 60;
+const SUMMARY_NEXT_TOP = 18;
+const SUMMARY_BOTTOM = PAGE_HEIGHT - 10;
+const SUMMARY_FONT_SIZES = [9, 8.5, 8, 7.5, 7, 6.5, 6];
+
+interface SummaryEntry {
+  against: boolean;
+  text: string;
+}
+
+interface SummaryJudge {
+  cells: Map<string, SummaryEntry[]>;
+  against: number;
+  name: string;
+  preferredRole: 'cronometrista' | 'giudice' | null;
+}
+
+// Un incarico è "contro" la preferenza se il giudice preferisce l'altro ruolo
+// (il melocotogno non conta, come nell'abbinamento automatico).
+function isAgainstPreference(preferredRole: SummaryJudge['preferredRole'], role: string, game: PalioGame): boolean {
+  if (!preferredRole || game === 'melocotogno') return false;
+  return preferredRole !== (role === 'cronometrista' ? 'cronometrista' : 'giudice');
+}
+
+function buildJudgeSummary(input: JudgeSheetsInput, games: PalioGame[]): { columns: { key: string; title: string }[]; judges: SummaryJudge[] } {
+  const judges = new Map<string, SummaryJudge>();
+  const getJudge = (id: string | undefined, name: string, preferredRole: SummaryJudge['preferredRole']) => {
+    const key = id ?? name;
+    let judge = judges.get(key);
+    if (!judge) {
+      judge = { against: 0, cells: new Map(), name, preferredRole };
+      judges.set(key, judge);
+    }
+    return judge;
+  };
+  const addEntry = (judge: SummaryJudge, column: string, entry: SummaryEntry) => {
+    judge.cells.set(column, [...(judge.cells.get(column) ?? []), entry]);
+    if (entry.against) judge.against += 1;
+  };
+
+  const gameOrder = [...games, 'finale' as PalioGame];
+  const sortKey = (a: JudgeSheetAssignment) => gameOrder.indexOf(a.game) * 1000 + (a.heatNumber ?? 0) * 10 + (a.isExtra ? 5 : 0) + (a.lane ?? 0) / 10;
+  const usedColumns = new Set<string>();
+
+  [...(input.judgeAssignments ?? [])]
+    .filter((a) => gameOrder.includes(a.game) && (a.role === 'cronometrista' || a.role === 'giudice'))
+    .sort((a, b) => sortKey(a) - sortKey(b))
+    .forEach((a) => {
+      const judge = getJudge(a.judgeId, a.judgeName, a.preferredRole ?? null);
+      const parts: string[] = [];
+      if (a.game !== 'melocotogno' && a.game !== 'finale') parts.push(a.heatNumber === null ? 'tutte le batt.' : `B${a.heatNumber}`);
+      if (a.isExtra) parts.push('extra');
+      else if (a.lane !== null && a.game !== 'melocotogno') parts.push(`C${a.lane}`);
+      parts.push(a.role === 'cronometrista' ? 'Tempi' : 'Penal.');
+      const against = isAgainstPreference(judge.preferredRole, a.role, a.game);
+      addEntry(judge, a.game, { against, text: parts.join(' ') + (against ? ' !' : '') });
+      usedColumns.add(a.game);
+    });
+
+  (input.fixedRoles ?? []).forEach((f) => {
+    const judge = getJudge(f.judgeId, f.judgeName, f.preferredRole ?? null);
+    addEntry(judge, 'fissi', { against: false, text: fixedRoleLabels[f.role] ?? f.role });
+    usedColumns.add('fissi');
+  });
+
+  const columns = [...gameOrder, 'fissi' as const]
+    .filter((key) => usedColumns.has(key))
+    .map((key) => ({ key, title: key === 'fissi' ? 'Figura fissa' : gameSheetTitles[key as PalioGame] }));
+  return { columns, judges: Array.from(judges.values()).sort((a, b) => a.name.localeCompare(b.name, 'it')) };
+}
+
+// Pagine riepilogative per giudice: cosa giudica (gioco, batteria, corsia, ruolo)
+// e quando (ordine dei giochi e delle batterie). In rosso gli incarichi contro la
+// preferenza. Il corpo tabella si rimpicciolisce per restare in 1 pagina (max 2).
+function drawJudgeSummaryPages(doc: PdfDoc, input: JudgeSheetsInput, games: PalioGame[]) {
+  const { columns, judges } = buildJudgeSummary(input, games);
+  if (judges.length === 0) return;
+  const headerLines = getEditionHeader(input);
+  const cellWidth = (SUMMARY_TABLE_WIDTH - SUMMARY_NAME_WIDTH - SUMMARY_PREF_WIDTH) / Math.max(columns.length, 1);
+
+  const metrics = (fontSize: number) => {
+    const lineHeight = fontSize * 0.42;
+    const rowPadding = fontSize * 0.3;
+    const rowHeights = judges.map((judge) => {
+      const lines = Math.max(1, ...Array.from(judge.cells.values()).map((entries) => entries.length), judge.against > 0 ? 2 : 1);
+      return lines * lineHeight + rowPadding;
+    });
+    return { lineHeight, rowHeights, rowPadding };
+  };
+  const pagesNeeded = (rowHeights: number[], headerHeight: number) => {
+    let pages = 1;
+    let y = SUMMARY_FIRST_TOP + headerHeight;
+    rowHeights.forEach((height) => {
+      if (y + height > SUMMARY_BOTTOM) {
+        pages += 1;
+        y = SUMMARY_NEXT_TOP + headerHeight;
+      }
+      y += height;
+    });
+    return pages;
+  };
+  const headerHeight = 9;
+  const fontSize = SUMMARY_FONT_SIZES.find((size) => pagesNeeded(metrics(size).rowHeights, headerHeight) === 1)
+    ?? SUMMARY_FONT_SIZES.find((size) => pagesNeeded(metrics(size).rowHeights, headerHeight) <= 2)
+    ?? SUMMARY_FONT_SIZES[SUMMARY_FONT_SIZES.length - 1];
+  const { lineHeight, rowHeights, rowPadding } = metrics(fontSize);
+
+  const drawTableHeader = (top: number) => {
+    doc.setDrawColor(150, 150, 150);
+    doc.setLineWidth(0.2);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    const heads = [
+      { title: 'Giudice', width: SUMMARY_NAME_WIDTH },
+      { title: 'Preferenza', width: SUMMARY_PREF_WIDTH },
+      ...columns.map((column) => ({ title: column.title, width: cellWidth })),
+    ];
+    let x = SUMMARY_MARGIN;
+    heads.forEach((head) => {
+      // Il testo condivide il colore di riempimento: va reimpostato a ogni cella.
+      doc.setFillColor(190, 192, 191);
+      doc.rect(x, top, head.width, headerHeight, 'FD');
+      doc.text(head.title, x + head.width / 2, top + 5.8, { align: 'center' });
+      x += head.width;
+    });
+  };
+
+  doc.addPage();
+  drawPageHeader(doc, headerLines);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.text('Riepilogo giudici', PAGE_WIDTH / 2, 44, { align: 'center' });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.text('B = batteria · C = corsia · Tempi = cronometrista · Penal. = giudice penalità · extra = di riserva', PAGE_WIDTH / 2, 50.5, { align: 'center' });
+  doc.setTextColor(197, 40, 15);
+  doc.setFont('helvetica', 'bold');
+  doc.text('In rosso con ! : incarico contro la preferenza del giudice', PAGE_WIDTH / 2, 55.5, { align: 'center' });
+  doc.setTextColor(0, 0, 0);
+
+  let y = SUMMARY_FIRST_TOP;
+  drawTableHeader(y);
+  y += headerHeight;
+
+  judges.forEach((judge, index) => {
+    const height = rowHeights[index];
+    if (y + height > SUMMARY_BOTTOM) {
+      doc.addPage();
+      y = SUMMARY_NEXT_TOP;
+      drawTableHeader(y);
+      y += headerHeight;
+    }
+    const shade = index % 2 === 0 ? 255 : 244;
+    doc.setDrawColor(150, 150, 150);
+    doc.setLineWidth(0.15);
+    doc.setFillColor(221, 221, 221);
+    doc.rect(SUMMARY_MARGIN, y, SUMMARY_NAME_WIDTH, height, 'FD');
+    doc.setFillColor(shade, shade, shade);
+    doc.rect(SUMMARY_MARGIN + SUMMARY_NAME_WIDTH, y, SUMMARY_PREF_WIDTH, height, 'FD');
+    columns.forEach((_, columnIndex) => {
+      doc.rect(SUMMARY_MARGIN + SUMMARY_NAME_WIDTH + SUMMARY_PREF_WIDTH + columnIndex * cellWidth, y, cellWidth, height, 'FD');
+    });
+
+    const baseline = y + rowPadding / 2 + lineHeight * 0.8;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(fontSize);
+    const [name] = doc.splitTextToSize(judge.name, SUMMARY_NAME_WIDTH - 3) as string[];
+    doc.text(name ?? '', SUMMARY_MARGIN + 1.5, baseline);
+
+    const prefX = SUMMARY_MARGIN + SUMMARY_NAME_WIDTH + 1.5;
+    doc.setFont('helvetica', 'normal');
+    doc.text(judge.preferredRole ? preferenceLabels[judge.preferredRole] : 'Indifferente', prefX, baseline);
+    if (judge.against > 0) {
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(197, 40, 15);
+      doc.text(`${judge.against} contro`, prefX, baseline + lineHeight);
+      doc.setTextColor(0, 0, 0);
+    }
+
+    columns.forEach((column, columnIndex) => {
+      const cellX = SUMMARY_MARGIN + SUMMARY_NAME_WIDTH + SUMMARY_PREF_WIDTH + columnIndex * cellWidth + 1.5;
+      (judge.cells.get(column.key) ?? []).forEach((entry, entryIndex) => {
+        doc.setFont('helvetica', entry.against ? 'bold' : 'normal');
+        doc.setTextColor(entry.against ? 197 : 0, entry.against ? 40 : 0, entry.against ? 15 : 0);
+        const [fitted] = doc.splitTextToSize(entry.text, cellWidth - 2) as string[];
+        doc.text(fitted ?? '', cellX, baseline + entryIndex * lineHeight);
+      });
+    });
+    doc.setTextColor(0, 0, 0);
+    y += height;
+  });
+}
+
 /** Errore del caricamento di jsPDF: di solito la pagina è aperta da prima di un nuovo deploy. */
 export const OUTDATED_APP_MESSAGE = 'Versione della pagina non aggiornata: ricarica (Cmd/Ctrl + Maiusc + R) e riprova';
 
@@ -312,7 +522,8 @@ export async function createDoc(): Promise<PdfDoc> {
 export const fileSlug = (edition: PalioEdition) => `${edition.year}-${edition.month}`;
 
 /**
- * PDF con: riepilogo di tutti i giochi/corsie (prima pagina) e, per ogni gioco
+ * PDF con: riepilogo di tutti i giochi/corsie (prima pagina), riepilogo per
+ * giudice (1-2 pagine) e, per ogni gioco
  * estratto, le schede giudice tempi e penalità di ciascuna corsia con le
  * contrade già inserite.
  */
@@ -322,6 +533,7 @@ export async function downloadJudgeSheetsPdf(input: JudgeSheetsInput, games: Pal
   const drawnGames = games.filter((game) => game !== 'melocotogno' && game !== 'finale');
 
   drawSummaryPage(doc, input, games);
+  drawJudgeSummaryPages(doc, input, games);
 
   drawnGames.forEach((game) => {
     const lanes = buildLanes(input.heats, input.contrade, game);
