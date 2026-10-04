@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { Flag, Medal, Sparkles } from 'lucide-react';
 import { PalioWinnerCelebration } from '../components/PalioWinnerCelebration';
 import sforzindaLogo from '../assets/sforzinda-logo-inverted.png';
@@ -202,7 +203,10 @@ export function PalioLive() {
                             {group.results.length}/{contrade.length}
                           </span>
                         </div>
-                        <div className="grid flex-1 auto-rows-fr gap-1.5 sm:grid-cols-2">
+                        <div
+                          className="grid flex-1 auto-rows-fr gap-1.5 sm:grid-flow-col sm:grid-cols-2 sm:[grid-template-rows:repeat(var(--rows),minmax(0,1fr))]"
+                          style={{ '--rows': Math.ceil(group.results.length / 2) } as CSSProperties}
+                        >
                           {group.results.map((result) => {
                             const contrada = contrade.find((item) => item.id === result.contrada_id);
                             const stemma = getContradaStemma(contrada?.name);
@@ -247,7 +251,10 @@ export function PalioLive() {
                     <Medal className="h-9 w-9 text-amber-300" />
                   </div>
                   <div className="min-h-0 flex-1 overflow-hidden">
-                    <div className="grid h-full grid-cols-1 gap-1.5 xl:grid-cols-2">
+                    <div
+                      className="grid h-full grid-cols-1 gap-1.5 xl:grid-flow-col xl:grid-cols-2 xl:[grid-template-rows:repeat(var(--rows),minmax(0,1fr))]"
+                      style={{ '--rows': Math.ceil(Math.min(ranking.length, 12) / 2) } as CSSProperties}
+                    >
                       {ranking.slice(0, 12).map((item) => {
                         const stemma = getContradaStemma(item.name);
 
