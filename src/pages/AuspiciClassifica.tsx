@@ -153,7 +153,7 @@ export function AuspiciClassifica() {
                     <Trophy aria-hidden="true" className="h-4 w-4" />
                     Classifica generale — Punti Auspicio
                   </div>
-                  <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
+                  <div className="grid grid-flow-col grid-cols-2 gap-1.5 sm:gap-2" style={{ gridTemplateRows: `repeat(${Math.ceil(ranking.length / 2)}, auto)` }}>
                     {ranking.map((item) => (
                       <div
                         className="grid grid-cols-[28px_32px_minmax(0,1fr)_56px] items-center gap-1.5 rounded-lg bg-amber-50/10 px-2 py-1.5 sm:grid-cols-[36px_40px_minmax(0,1fr)_72px] sm:gap-2 sm:px-3 sm:py-2"
@@ -192,7 +192,7 @@ export function AuspiciClassifica() {
                       <Trophy aria-hidden="true" className="h-4 w-4" />
                       {auspiciProvaLabels[prova]}
                     </h3>
-                    <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
+                    <div className="grid grid-flow-col grid-cols-2 gap-1.5 sm:gap-2" style={{ gridTemplateRows: `repeat(${Math.ceil(provaRanking.length / 2)}, auto)` }}>
                       {provaRanking.map(({ item, result }) => (
                         <div
                           className="grid grid-cols-[28px_32px_minmax(0,1fr)_56px] items-center gap-1.5 rounded-lg bg-amber-50/10 px-2 py-1.5 sm:grid-cols-[36px_40px_minmax(0,1fr)_72px] sm:gap-2 sm:px-3 sm:py-2"

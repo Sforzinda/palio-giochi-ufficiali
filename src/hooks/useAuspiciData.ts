@@ -106,10 +106,9 @@ function buildAuspiciRanking(
     item.totalPoints += adjustment.points;
   });
 
-  // Criteri di parità nella classifica finale (Regolamento, punto 4): a
-  // parità di punti prevalgono maggior numero di vittorie e miglior
-  // piazzamento nel Giuramento delle Contrade; persistendo la parità, le
-  // squadre sono ex aequo.
+  // Regolamento, punto 4: a parità di punti vittorie e piazzamento nel
+  // Giuramento determinano solo l'ordine di visualizzazione; il piazzamento
+  // mostrato è lo stesso (pari merito) per tutte le squadre con gli stessi punti.
   const sorted = Array.from(byParticipant.values()).sort((a, b) => {
     if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
     if (b.wins !== a.wins) return b.wins - a.wins;
@@ -123,7 +122,7 @@ function buildAuspiciRanking(
   let previousRank = 0;
 
   return sorted.map((item, index) => {
-    const key = `${item.totalPoints}|${item.wins}|${item.giuramentoPosition ?? 'x'}`;
+    const key = String(item.totalPoints);
     const rank = key === previousKey ? previousRank : index + 1;
     previousKey = key;
     previousRank = rank;
