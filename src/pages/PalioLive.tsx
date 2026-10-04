@@ -153,30 +153,36 @@ export function PalioLive() {
                       Prima dei giochi
                     </span>
                   </div>
-                  <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden md:grid-cols-2 xl:grid-cols-4">
+                  <div
+                    className="grid min-h-0 flex-1 auto-rows-fr grid-cols-1 gap-3 overflow-hidden md:grid-cols-2 lg:[grid-template-columns:repeat(var(--cols),minmax(0,1fr))]"
+                    style={{ '--cols': activeHeatGroups.length > 4 ? Math.ceil(activeHeatGroups.length / 2) : Math.max(activeHeatGroups.length, 1) } as CSSProperties}
+                  >
                     {activeHeatGroups.map((group) => (
-                      <div key={group.heatNumber} className="min-h-0 rounded-md border border-amber-200/20 bg-amber-50/10 p-3">
-                        <div className="mb-3 border-b border-amber-200/20 pb-2">
-                          <h3 className="text-2xl font-black text-amber-100">Batteria {group.heatNumber}</h3>
+                      <div key={group.heatNumber} className="flex h-full min-h-0 flex-col rounded-md border border-amber-200/20 bg-amber-50/10 p-3">
+                        <div className="mb-2 border-b border-amber-200/20 pb-2">
+                          <h3 className="text-2xl font-black text-amber-100 lg:text-3xl">Batteria {group.heatNumber}</h3>
                         </div>
-                        <div className="space-y-2">
+                        <div className="grid min-h-0 flex-1 auto-rows-fr gap-2">
                           {group.items.map((heat) => {
                             const heatContradaName = contrade.find((contrada) => contrada.id === heat.contrada_id)?.name ?? 'Contrada';
                             const heatStemma = getContradaStemma(heatContradaName);
 
                             return (
-                            <div key={heat.contrada_id} className="grid grid-cols-[36px_minmax(0,1fr)_64px] items-center gap-2 rounded-md bg-black/20 px-2 py-2">
-                              <div className="text-2xl font-black text-amber-300">{heat.display_order}</div>
-                              <div className="flex min-w-0 items-center gap-2">
-                                {heatStemma && (
-                                  <img src={heatStemma} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover ring-1 ring-amber-200/30" />
+                              <div
+                                key={heat.contrada_id}
+                                className="grid min-h-0 grid-cols-[44px_minmax(0,1fr)_auto] items-center gap-3 overflow-hidden rounded-md bg-black/20 bg-cover bg-center px-3 py-2"
+                                style={
+                                  heatStemma
+                                    ? { backgroundImage: `linear-gradient(90deg, rgba(10,6,4,.82), rgba(10,6,4,.5) 55%, rgba(10,6,4,.82)), url(${heatStemma})` }
+                                    : undefined
+                                }
+                              >
+                                <div className="text-3xl font-black text-amber-300 lg:text-4xl">{heat.display_order}</div>
+                                <div className="truncate text-xl font-black text-amber-50 lg:text-2xl xl:text-3xl">{heatContradaName}</div>
+                                {heat.no_players && (
+                                  <div className="rounded bg-red-600/80 px-2 py-1 text-center text-sm font-black text-white">N.A.</div>
                                 )}
-                                <div className="truncate text-xl font-black text-amber-50">{heatContradaName}</div>
                               </div>
-                              {heat.no_players && (
-                                <div className="rounded bg-red-600/80 px-2 py-1 text-center text-sm font-black text-white">N.A.</div>
-                              )}
-                            </div>
                             );
                           })}
                         </div>
