@@ -976,12 +976,12 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
               </p>
             </div>
             {renderProposal()}
-            <div className="mt-3 flex flex-wrap gap-2" role="tablist">
+            <div className="mt-3 flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0" role="tablist">
               {availableGames.map((g) => (
                 <button
                   key={g}
                   aria-selected={g === game}
-                  className={`rounded-md border px-3 py-1.5 text-sm font-semibold transition ${
+                  className={`shrink-0 whitespace-nowrap rounded-md border px-3 py-1.5 text-sm font-semibold transition ${
                     g === game
                       ? 'border-palio-500 bg-palio-500/10 text-palio-300'
                       : 'border-stone-700 text-stone-300 hover:border-stone-500'

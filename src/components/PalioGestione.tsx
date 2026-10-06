@@ -1654,7 +1654,7 @@ function PalioResultsInputContent() {
           </div>
 
           <div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
               {availableGames.map((g) => {
                 const isActive = g === game;
                 const isLocked = g === 'finale' && !isFinaleReady;
@@ -1665,7 +1665,7 @@ function PalioResultsInputContent() {
                     disabled={isLocked}
                     onClick={() => setGame(g)}
                     title={isLocked ? 'Completa prima tutte le prove precedenti' : undefined}
-                    className={`rounded-md border px-3 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                    className={`shrink-0 whitespace-nowrap rounded-md border px-3 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
                       isActive ? 'border-palio-500 bg-palio-500 text-white' : 'border-stone-700 bg-stone-900 text-stone-300 hover:border-palio-400'
                     }`}
                   >

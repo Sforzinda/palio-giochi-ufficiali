@@ -288,14 +288,14 @@ function PalioTotalSummary({
           </div>
         </div>
 
-        <div aria-label="Giochi del riepilogo" className="mt-5 flex flex-wrap gap-2" role="tablist">
+        <div aria-label="Giochi del riepilogo" className="mt-5 flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0" role="tablist">
           {groups.map((group, index) => {
             const isActive = index === activeIndex;
 
             return (
               <button
                 aria-selected={isActive}
-                className={`rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.2em] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-200 ${
+                className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.2em] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-200 ${
                   isActive
                     ? 'border-amber-100/60 bg-amber-100/18 text-amber-50'
                     : 'border-amber-100/14 bg-black/16 text-amber-100/54'
