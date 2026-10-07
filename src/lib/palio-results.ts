@@ -130,10 +130,39 @@ const applyPalioCalculationOverride = <T extends Pick<PalioEditionResultInput, '
   };
 };
 
+const isPalioRowRegistered = (row: PalioEditionResultInput, game: PalioGame): boolean => {
+  if (row.is_disqualified) return true;
+  if (game === 'melocotogno') {
+    return [row.melocotogno_2_count, row.melocotogno_5_count, row.melocotogno_10_count].some((value) => value.trim() !== '');
+  }
+  return parsePalioNumber(row.time_seconds) !== null;
+};
+
+// Posizioni e punteggi vengono assegnati solo quando tutte le contrade
+// richieste hanno un risultato registrato (o sono marcate "senza giocatori" /
+// squalificate); finché ne manca anche solo una restano vuoti. Per la finale
+// `requiredContradaIds` limita il controllo alle sole finaliste.
 export function calculatePalioRows(
   rows: PalioEditionResultInput[],
   game: PalioGame,
-  noPlayerContradaIds: Set<string> = new Set()
+  noPlayerContradaIds: Set<string> = new Set(),
+  requiredContradaIds?: Set<string>
+): PalioCalculatedResultRow[] {
+  const calculated = calculatePalioRowsUnchecked(rows, game, noPlayerContradaIds);
+  const allRegistered = rows
+    .filter((row) => !requiredContradaIds || requiredContradaIds.has(row.contrada_id))
+    .every((row) => noPlayerContradaIds.has(row.contrada_id) || isPalioRowRegistered(row, game));
+  if (allRegistered) return calculated;
+
+  return calculated.map((row) => (
+    row.is_calculation_overridden ? row : { ...row, points: '', position: '' }
+  ));
+}
+
+function calculatePalioRowsUnchecked(
+  rows: PalioEditionResultInput[],
+  game: PalioGame,
+  noPlayerContradaIds: Set<string>
 ): PalioCalculatedResultRow[] {
   const effectiveRows = rows.map((row) => (
     noPlayerContradaIds.has(row.contrada_id)

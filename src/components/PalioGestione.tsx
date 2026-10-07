@@ -462,8 +462,8 @@ function PalioResultsInputContent() {
   const finalists = useMemo(() => preFinaleRanking.slice(0, 3), [preFinaleRanking]);
 
   const calculatedRows = useMemo(
-    () => calculatePalioRows(results, game, noPlayerContradaIds),
-    [game, noPlayerContradaIds, results]
+    () => calculatePalioRows(results, game, noPlayerContradaIds, game === 'finale' ? new Set(finalists.map((item) => item.contradaId)) : undefined),
+    [finalists, game, noPlayerContradaIds, results]
   );
   // Per carriola/cerchio/torre/corsa l'ordine di inserimento può seguire le
   // batterie estratte (per numero di batteria, o per corsia trasversalmente
@@ -537,7 +537,7 @@ function PalioResultsInputContent() {
 
   function updateCalculationOverride(contradaId: string, enabled: boolean) {
     setResults((prev) => {
-      const calculatedRow = calculatePalioRows(prev, game, noPlayerContradaIds).find((r) => r.contrada_id === contradaId);
+      const calculatedRow = calculatePalioRows(prev, game, noPlayerContradaIds, game === 'finale' ? new Set(finalists.map((item) => item.contradaId)) : undefined).find((r) => r.contrada_id === contradaId);
       return prev.map((row) => {
         if (row.contrada_id !== contradaId) return row;
         if (!enabled || !calculatedRow) {
