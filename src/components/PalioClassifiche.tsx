@@ -91,27 +91,31 @@ export function PalioClassifiche({ contrade, edition }: PalioClassificheProps) {
   }, [fetchResults]);
 
   const baseGames = useMemo(() => (edition ? getPalioGamesForMonth(edition.month) : []), [edition]);
-  const nameById = useMemo(() => new Map(contrade.map((contrada) => [contrada.id, contrada.name])), [contrade]);
 
   const gameRankings = useMemo(() => {
     const games: PalioGame[] = edition?.month === 'ottobre' ? [...baseGames, 'finale'] : baseGames;
     return games.map((game) => {
-      const gameResults = results.filter((result) => result.game === game);
-      const items: RankedItem[] = gameResults.map((result) => ({
-        contradaId: result.contrada_id,
-        detail: result.is_disqualified
-          ? 'N.A.'
-          : game !== 'finale' && result.adjusted_time_seconds !== null && result.adjusted_time_seconds !== ''
-            ? `${formatNumber(result.adjusted_time_seconds)} s`
-            : '',
-        name: nameById.get(result.contrada_id) ?? 'Contrada',
-        points: toPoints(game === 'finale' ? result.adjusted_time_seconds : result.points),
-        rank: result.position
-      }));
+      const resultByContrada = new Map(
+        results.filter((result) => result.game === game).map((result) => [result.contrada_id, result])
+      );
+      const items: RankedItem[] = contrade.map((contrada) => {
+        const result = resultByContrada.get(contrada.id);
+        return {
+          contradaId: contrada.id,
+          detail: result?.is_disqualified
+            ? 'N.A.'
+            : game !== 'finale' && result?.adjusted_time_seconds !== null && result?.adjusted_time_seconds !== undefined && result.adjusted_time_seconds !== ''
+              ? `${formatNumber(result.adjusted_time_seconds)} s`
+              : '',
+          name: contrada.name,
+          points: toPoints(game === 'finale' ? result?.adjusted_time_seconds : result?.points),
+          rank: result?.position ?? null
+        };
+      });
       items.sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99) || a.name.localeCompare(b.name, 'it'));
       return { game, items };
     });
-  }, [baseGames, edition?.month, nameById, results]);
+  }, [baseGames, contrade, edition?.month, results]);
 
   // Classifica cumulativa dopo i primi `count` giochi, con pari merito.
   const cumulativeRankings = useMemo(() => baseGames.map((_, index) => {
@@ -164,9 +168,7 @@ export function PalioClassifiche({ contrade, edition }: PalioClassificheProps) {
           {gameRankings.map(({ game, items }) => (
             <div key={game} className="rounded-lg border border-stone-800 bg-stone-900/50 p-4">
               <h4 className="mb-2 font-semibold text-stone-100">{palioGameLabels[game]}</h4>
-              {items.length === 0
-                ? <p className="text-sm text-stone-500">Nessun risultato inserito.</p>
-                : <RankingTable items={items} pointsLabel={game === 'finale' ? 'Tempo' : 'Punti'} />}
+              <RankingTable items={items} pointsLabel={game === 'finale' ? 'Tempo' : 'Punti'} />
             </div>
           ))}
         </div>
