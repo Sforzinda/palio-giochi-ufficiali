@@ -28,6 +28,8 @@ import {
   getPalioEditionOrder,
   getStablePalioRandomOrder,
   palioGameDescriptions,
+  countMelocotognoFettucce,
+  MELOCOTOGNO_MAX_FETTUCCE,
   parsePalioInteger,
   parsePalioNumber,
   validatePalioRows,
@@ -67,6 +69,7 @@ interface RankingEntry {
 
 interface FettucciaStepperProps {
   contradaName: string;
+  canIncrement?: boolean;
   disabled: boolean;
   label: string;
   onChange: (delta: number) => void;
@@ -77,7 +80,7 @@ interface FettucciaStepperProps {
 // Stepper +/- accessibile per i conteggi fettucce del melocotogno: evita di
 // dover digitare a mano su mobile e permette di correggere un valore inserito
 // per errore in eccesso senza mai poter scendere sotto zero.
-function FettucciaStepper({ contradaName, disabled, label, onChange, onInputChange, value }: FettucciaStepperProps) {
+function FettucciaStepper({ canIncrement = true, contradaName, disabled, label, onChange, onInputChange, value }: FettucciaStepperProps) {
   const numericValue = parsePalioInteger(value) ?? 0;
   const canDecrement = !disabled && numericValue > 0;
 
@@ -114,7 +117,7 @@ function FettucciaStepper({ contradaName, disabled, label, onChange, onInputChan
         <button
           aria-label={`Aggiungi una fettuccia da ${label.replace('Fettucce da ', '')} a ${contradaName}`}
           className="flex w-11 shrink-0 items-center justify-center border-l border-stone-700 text-stone-300 transition hover:bg-stone-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-          disabled={disabled}
+          disabled={disabled || !canIncrement}
           onClick={() => onChange(1)}
           type="button"
         >
@@ -532,8 +535,25 @@ function PalioResultsInputContent() {
     setResults((prev) => prev.map((row) => {
       if (row.contrada_id !== contradaId) return row;
       const current = parsePalioInteger(row[field]) ?? 0;
-      const next = Math.max(0, current + delta);
+      const otherTotal = countMelocotognoFettucce(row) - current;
+      const next = Math.min(Math.max(0, current + delta), Math.max(0, MELOCOTOGNO_MAX_FETTUCCE - otherTotal));
       return { ...row, [field]: String(next) };
+    }));
+  }
+
+  // Digitazione manuale: il totale fettucce della contrada non può superare il massimo.
+  function updateMelocotognoInput(
+    contradaId: string,
+    field: 'melocotogno_2_count' | 'melocotogno_5_count' | 'melocotogno_10_count',
+    value: string
+  ) {
+    setResults((prev) => prev.map((row) => {
+      if (row.contrada_id !== contradaId) return row;
+      const typed = parsePalioInteger(value);
+      if (typed === null) return { ...row, [field]: value };
+      const otherTotal = countMelocotognoFettucce(row) - (parsePalioInteger(row[field]) ?? 0);
+      const capped = Math.min(typed, Math.max(0, MELOCOTOGNO_MAX_FETTUCCE - otherTotal));
+      return { ...row, [field]: String(capped) };
     }));
   }
 
@@ -1775,7 +1795,7 @@ function PalioResultsInputContent() {
                               <button
                                 aria-label={`Aggiungi una ${label.toLowerCase().replace('fettucce', 'fettuccia')} a ${name}`}
                                 className="flex min-w-0 flex-1 items-center justify-between gap-2 px-3 py-2 text-left text-sm font-semibold text-stone-100 transition hover:bg-stone-700 disabled:cursor-not-allowed disabled:opacity-40"
-                                disabled={isNoPlayer}
+                                disabled={isNoPlayer || countMelocotognoFettucce(row) >= MELOCOTOGNO_MAX_FETTUCCE}
                                 onClick={() => stepMelocotognoField(row.contrada_id, field, 1)}
                                 type="button"
                               >
@@ -1855,26 +1875,29 @@ function PalioResultsInputContent() {
                           <>
                             <FettucciaStepper
                               contradaName={contrada?.name ?? 'contrada'}
+                              canIncrement={countMelocotognoFettucce(row) < MELOCOTOGNO_MAX_FETTUCCE}
                               disabled={isNoPlayer}
                               label="Fettucce da 2"
                               onChange={(delta) => stepMelocotognoField(row.contrada_id, 'melocotogno_2_count', delta)}
-                              onInputChange={(value) => updateField(row.contrada_id, 'melocotogno_2_count', value)}
+                              onInputChange={(value) => updateMelocotognoInput(row.contrada_id, 'melocotogno_2_count', value)}
                               value={row.melocotogno_2_count}
                             />
                             <FettucciaStepper
                               contradaName={contrada?.name ?? 'contrada'}
+                              canIncrement={countMelocotognoFettucce(row) < MELOCOTOGNO_MAX_FETTUCCE}
                               disabled={isNoPlayer}
                               label="Fettucce da 5"
                               onChange={(delta) => stepMelocotognoField(row.contrada_id, 'melocotogno_5_count', delta)}
-                              onInputChange={(value) => updateField(row.contrada_id, 'melocotogno_5_count', value)}
+                              onInputChange={(value) => updateMelocotognoInput(row.contrada_id, 'melocotogno_5_count', value)}
                               value={row.melocotogno_5_count}
                             />
                             <FettucciaStepper
                               contradaName={contrada?.name ?? 'contrada'}
+                              canIncrement={countMelocotognoFettucce(row) < MELOCOTOGNO_MAX_FETTUCCE}
                               disabled={isNoPlayer}
                               label="Fettucce da 10"
                               onChange={(delta) => stepMelocotognoField(row.contrada_id, 'melocotogno_10_count', delta)}
-                              onInputChange={(value) => updateField(row.contrada_id, 'melocotogno_10_count', value)}
+                              onInputChange={(value) => updateMelocotognoInput(row.contrada_id, 'melocotogno_10_count', value)}
                               value={row.melocotogno_10_count}
                             />
                             <label className="flex items-center gap-2 text-xs font-semibold text-stone-400">

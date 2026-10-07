@@ -69,6 +69,15 @@ export const getStablePalioRandomOrder = (seed: string): number => {
   return hash;
 };
 
+export const MELOCOTOGNO_MAX_FETTUCCE = 24;
+
+export const countMelocotognoFettucce = (
+  row: Pick<PalioEditionResultInput, 'melocotogno_2_count' | 'melocotogno_5_count' | 'melocotogno_10_count'>
+): number =>
+  (parsePalioInteger(row.melocotogno_2_count) ?? 0) +
+  (parsePalioInteger(row.melocotogno_5_count) ?? 0) +
+  (parsePalioInteger(row.melocotogno_10_count) ?? 0);
+
 export const parsePalioInteger = (value: string): number | null => {
   if (value.trim() === '') return null;
   const parsed = Number(value);
@@ -291,7 +300,8 @@ export function validatePalioRows(
       const values = [row.melocotogno_2_count, row.melocotogno_5_count, row.melocotogno_10_count];
       const hasInput = values.some((value) => value.trim() !== '');
       const hasInvalidValue = values.some((value) => value.trim() !== '' && (parsePalioInteger(value) === null || parsePalioInteger(value)! < 0));
-      status = hasInvalidValue ? 'invalid' : hasInput ? 'complete' : 'missing';
+      const exceedsMax = countMelocotognoFettucce(row) > MELOCOTOGNO_MAX_FETTUCCE;
+      status = hasInvalidValue || exceedsMax ? 'invalid' : hasInput ? 'complete' : 'missing';
     } else {
       const timeSeconds = parsePalioNumber(row.time_seconds);
       const penalties = parsePalioInteger(row.penalty_count);
