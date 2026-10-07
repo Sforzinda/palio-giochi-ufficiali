@@ -131,6 +131,8 @@ function PalioResultsInputContent() {
   const [editions, setEditions] = useState<PalioEdition[]>([]);
   const [selectedEditionId, setSelectedEditionId] = useState('');
   const [game, setGame] = useState<PalioGame>('melocotogno');
+  // Melocotogno: inserimento per contrada oppure per tipo di fettuccia (2/5/10).
+  const [melocotognoView, setMelocotognoView] = useState<'contrade' | 'punteggi'>('contrade');
   const [results, setResults] = useState<PalioEditionResultInput[]>([]);
   const [editionResults, setEditionResults] = useState<{ contrada_id: string; game: PalioGame; points: number | string | null }[]>([]);
   const [heats, setHeats] = useState<PalioEditionHeat[]>([]);
@@ -1731,8 +1733,89 @@ function PalioResultsInputContent() {
               </div>
             </div>
 
+            {game === 'melocotogno' && (
+              <div className="mt-4 inline-flex rounded-full border border-stone-700 bg-stone-900 p-1 text-xs font-semibold">
+                {([['contrade', 'Per contrada'], ['punteggi', 'Per punteggio']] as const).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setMelocotognoView(mode)}
+                    className={`rounded-full px-3 py-1 transition ${
+                      melocotognoView === mode ? 'bg-palio-500 text-white' : 'text-stone-300 hover:text-white'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <form onSubmit={handleSave} className="mt-4 space-y-3">
-              {displayRows.map((row) => {
+              {game === 'melocotogno' && melocotognoView === 'punteggi' && (
+                <div className="space-y-4">
+                  {([
+                    ['Fettucce da 2', 'melocotogno_2_count'],
+                    ['Fettucce da 5', 'melocotogno_5_count'],
+                    ['Fettucce da 10', 'melocotogno_10_count'],
+                  ] as const).map(([label, field]) => (
+                    <div key={field} className="rounded-lg border border-stone-700 bg-stone-900 p-4">
+                      <div className="mb-2 flex items-center justify-between">
+                        <h3 className="text-sm font-bold text-stone-100">{label}</h3>
+                        <span className="text-xs text-stone-400">
+                          Totale: {displayRows.reduce((sum, r) => sum + (parsePalioInteger(r[field]) ?? 0), 0)}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                        {displayRows.map((row) => {
+                          const name = contrade.find((c) => c.id === row.contrada_id)?.name ?? 'Contrada';
+                          const count = parsePalioInteger(row[field]) ?? 0;
+                          const isNoPlayer = noPlayerContradaIds.has(row.contrada_id);
+                          return (
+                            <div key={row.contrada_id} className="flex items-stretch overflow-hidden rounded-md border border-stone-700 bg-stone-800">
+                              <button
+                                aria-label={`Aggiungi una ${label.toLowerCase().replace('fettucce', 'fettuccia')} a ${name}`}
+                                className="flex min-w-0 flex-1 items-center justify-between gap-2 px-3 py-2 text-left text-sm font-semibold text-stone-100 transition hover:bg-stone-700 disabled:cursor-not-allowed disabled:opacity-40"
+                                disabled={isNoPlayer}
+                                onClick={() => stepMelocotognoField(row.contrada_id, field, 1)}
+                                type="button"
+                              >
+                                <span className="truncate">{name}</span>
+                                <span className="rounded-full bg-palio-500/20 px-2 py-0.5 text-xs font-bold text-palio-300">{count}</span>
+                              </button>
+                              <button
+                                aria-label={`Togli una ${label.toLowerCase().replace('fettucce', 'fettuccia')} a ${name}`}
+                                className="flex w-9 shrink-0 items-center justify-center border-l border-stone-700 text-stone-300 transition hover:bg-stone-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                                disabled={isNoPlayer || count === 0}
+                                onClick={() => stepMelocotognoField(row.contrada_id, field, -1)}
+                                type="button"
+                              >
+                                <Minus aria-hidden="true" className="h-4 w-4" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                  <div className="rounded-lg border border-stone-700 bg-stone-900 p-4">
+                    <h3 className="mb-2 text-sm font-bold text-stone-100">Riepilogo</h3>
+                    <div className="grid gap-1 text-sm text-stone-300 sm:grid-cols-2">
+                      {displayRows.map((row) => (
+                        <div key={row.contrada_id} className="flex justify-between gap-2">
+                          <span>{contrade.find((c) => c.id === row.contrada_id)?.name ?? 'Contrada'}</span>
+                          <span className="font-semibold text-stone-100">
+                            {(parsePalioInteger(row.melocotogno_2_count) ?? 0) * 2 +
+                              (parsePalioInteger(row.melocotogno_5_count) ?? 0) * 5 +
+                              (parsePalioInteger(row.melocotogno_10_count) ?? 0) * 10} pt fettucce
+                            {row.position ? ` · ${row.position}° · ${row.points || '0'} pt` : ''}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+              {!(game === 'melocotogno' && melocotognoView === 'punteggi') && displayRows.map((row) => {
                 const contrada = contrade.find((c) => c.id === row.contrada_id);
                 const isMelocotogno = game === 'melocotogno';
                 const isNoPlayer = noPlayerContradaIds.has(row.contrada_id);
