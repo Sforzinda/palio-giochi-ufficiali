@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { Flag, Medal, Sparkles } from 'lucide-react';
+import { findPalioRecord } from '../lib/palio-records';
+import { usePalioRecords } from '../hooks/usePalioRecords';
+import { PalioRecordBadge, PalioRecordSummary } from '../components/PalioRecord';
 import { PalioWinnerCelebration } from '../components/PalioWinnerCelebration';
 import sforzindaLogo from '../assets/sforzinda-logo-inverted.png';
 import { getContradaStemma } from '../lib/contrada-stemmi';
@@ -39,6 +42,8 @@ export function PalioLive() {
     tripliceWinner,
     tripliceWinnerResult
   } = usePalioLiveData('palio-live-page');
+
+  const { records } = usePalioRecords(edition?.id);
 
   const [sectionIndex, setSectionIndex] = useState(0);
 
@@ -209,6 +214,7 @@ export function PalioLive() {
                             {group.results.length}/{contrade.length}
                           </span>
                         </div>
+                        <PalioRecordSummary record={findPalioRecord(records, group.game)} contrade={contrade} />
                         <div
                           className="grid flex-1 auto-rows-fr gap-1.5 sm:grid-flow-col sm:grid-cols-2 sm:[grid-template-rows:repeat(var(--rows),minmax(0,1fr))]"
                           style={{ '--rows': Math.ceil(group.results.length / 2) } as CSSProperties}
@@ -230,6 +236,7 @@ export function PalioLive() {
                                 <div className="min-w-0">
                                   <div className="truncate text-base font-black text-amber-50">{contrada?.name ?? 'Contrada'}</div>
                                   <div className="text-xs font-semibold uppercase tracking-wide text-amber-200/55">{getResultPositionLabel(result)}</div>
+                                  <PalioRecordBadge result={result} record={findPalioRecord(records, group.game)} />
                                 </div>
                                 <div className="text-right text-lg font-black text-amber-300">{formatNumber(result.points)}</div>
                                 <div className="truncate text-right text-sm font-semibold text-amber-100/75">{getResultValue(result)}</div>

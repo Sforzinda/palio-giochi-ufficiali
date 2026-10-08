@@ -1,5 +1,9 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, CheckCircle, Clock, Download, Eye, EyeOff, Flag, Gavel, ListOrdered, Minus, Plus, PlusCircle, Repeat, RotateCcw, Save, Send, Trophy, Users as UsersIcon, Utensils } from 'lucide-react';
+import { findPalioRecord } from '../lib/palio-records';
+import { usePalioRecords } from '../hooks/usePalioRecords';
+import { PalioRecordInput } from './PalioRecordInput';
+import { PalioRecordBadge } from './PalioRecord';
 import { getSupabaseClient } from '../config';
 import { AuspiciGestioneContent } from './AuspiciGestione';
 import { PalioAuthGate } from './PalioAuthGate';
@@ -159,6 +163,8 @@ function PalioResultsInputContent() {
   const [generatingResultsPdf, setGeneratingResultsPdf] = useState(false);
   const [activeSection, setActiveSection] = useState<'estrazioni' | 'giochi' | 'classifiche' | 'giudici' | 'auspici' | 'utenti'>('estrazioni');
   const { isAdmin } = usePalioAuth();
+  const { records, loading: recordsLoading, error: recordsError, refresh: refreshRecords } = usePalioRecords(selectedEditionId);
+  const gameRecord = findPalioRecord(records, game);
   const [resultsSortMode, setResultsSortMode] = useState<'alfabetico' | 'batteria' | 'corsia'>('alfabetico');
 
   const fetchEditions = useCallback(async () => {
@@ -1697,6 +1703,30 @@ function PalioResultsInputContent() {
               })}
             </div>
             <p className="mt-2 text-sm text-stone-400">{palioGameDescriptions[game]}</p>
+
+            {selectedEdition && <PalioRecordInput key={`${selectedEdition.id}-${game}`} contrade={contrade} edition={selectedEdition} game={game} record={gameRecord} loading={recordsLoading} error={recordsError} onSaved={refreshRecords} />}
+
+            {gameRecord && (
+              <div className="mt-3 flex flex-wrap gap-2" aria-live="polite">
+                {displayRows.filter((row) => validation.statusByContradaId.get(row.contrada_id) === 'complete' && !noPlayerContradaIds.has(row.contrada_id)).map((row) => (
+                  <div key={row.contrada_id} className="text-sm text-stone-200">
+                    <PalioRecordBadge
+                      contradaName={contrade.find((contrada) => contrada.id === row.contrada_id)?.name}
+                      record={gameRecord}
+                      result={{
+                        ...row,
+                        game,
+                        penalty_count: parsePalioInteger(row.penalty_count),
+                        position: parsePalioInteger(row.position),
+                        melocotogno_2_count: parsePalioInteger(row.melocotogno_2_count),
+                        melocotogno_5_count: parsePalioInteger(row.melocotogno_5_count),
+                        melocotogno_10_count: parsePalioInteger(row.melocotogno_10_count),
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
 
             {canChooseResultsSortMode && (
               <div className="mt-3 flex flex-wrap items-center gap-2">

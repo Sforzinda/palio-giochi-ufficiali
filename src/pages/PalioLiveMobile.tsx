@@ -1,4 +1,7 @@
 import { Flag, Medal, Sparkles } from 'lucide-react';
+import { findPalioRecord } from '../lib/palio-records';
+import { usePalioRecords } from '../hooks/usePalioRecords';
+import { PalioRecordBadge, PalioRecordSummary } from '../components/PalioRecord';
 import { PalioWinnerCelebration } from '../components/PalioWinnerCelebration';
 import sforzindaLogo from '../assets/sforzinda-logo-inverted.png';
 import { getContradaStemma } from '../lib/contrada-stemmi';
@@ -28,6 +31,8 @@ export function PalioLiveMobile() {
     tripliceWinner,
     tripliceWinnerResult
   } = usePalioLiveData('palio-live-mobile-page');
+
+  const { records } = usePalioRecords(edition?.id);
 
   const isActive = !loading && control && edition && (
     tripliceWinner || control.show_heats || control.show_games || control.show_partial_ranking || control.show_total_ranking
@@ -138,6 +143,7 @@ export function PalioLiveMobile() {
                           <h3 className="text-base font-black text-amber-100">{palioGameLabels[group.game]}</h3>
                           <span className="text-xs font-semibold text-amber-200/60">{group.results.length}/{contrade.length}</span>
                         </div>
+                        <PalioRecordSummary record={findPalioRecord(records, group.game)} contrade={contrade} />
                         <div className="space-y-1.5">
                           {group.results.map((result) => {
                             const contrada = contrade.find((item) => item.id === result.contrada_id);
@@ -155,6 +161,7 @@ export function PalioLiveMobile() {
                                 <div className="min-w-0">
                                   <div className="truncate text-sm font-black text-amber-50">{contrada?.name ?? 'Contrada'}</div>
                                   <div className="text-[10px] font-semibold uppercase tracking-wide text-amber-200/50">{getResultPositionLabel(result)}</div>
+                                  <PalioRecordBadge result={result} record={findPalioRecord(records, group.game)} />
                                 </div>
                                 <div className="text-right text-base font-black text-amber-300">{formatNumber(result.points)}</div>
                                 <div className="truncate text-right text-xs font-semibold text-amber-100/70">{getResultValue(result)}</div>

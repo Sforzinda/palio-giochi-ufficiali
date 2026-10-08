@@ -64,3 +64,30 @@ ufficiali pubblici (vedi discussione issue #97).
   [`sql/auspici-serata.sql`](sql/auspici-serata.sql)), create sullo stesso
   progetto Supabase "Fanta" ma completamente separate da `palio_*`: nessuna
   interferenza con le estrazioni/risultati ufficiali.
+
+## Record dei giochi
+
+In Gestione → Giochi, sotto la scelta della prova, si può salvare il **record
+precedente** con contrada, anno e valore. Il riferimento è specifico per gioco
+ed edizione e va inserito per ogni nuova edizione; resta invariato quando viene
+superato, per conservare il confronto storico. È modificabile o rimovibile dai
+soli gestori dei giochi.
+
+Per le prove a tempo il valore è il tempo ufficiale in secondi, comprensivo delle
+penalità (fino a due decimali); per il Melocotogno è il totale intero dei punti
+fettucce, non i punti Palio. La Gestione mostra gli avvisi già sui risultati in
+bozza; le viste pubbliche desktop e mobile li mostrano sui risultati registrati
+e classificati. “Record battuto!” indica un miglioramento stretto;
+“Record eguagliato” indica lo stesso valore al centesimo. Squalifiche, contrade
+senza giocatori e tempi non validi non concorrono al confronto.
+
+Prima di pubblicare il frontend, applicare sul progetto Supabase Fanta la nuova
+migrazione [`sql/palio-record.sql`](sql/palio-record.sql): crea la tabella
+`palio_game_records`, la lettura pubblica, le scritture protette da
+`can_manage_palio_games()` e gli aggiornamenti Realtime. Non modifica i
+risultati o il calcolo dei punteggi. Se la tabella manca, la Gestione mostra
+l’errore accanto ai pulsanti del record e le viste pubbliche continuano a
+mostrare i risultati senza record.
+
+I test del confronto si eseguono con Node che supporta lo stripping TypeScript:
+`node --experimental-strip-types --test tests/palio-records.test.mjs`.
