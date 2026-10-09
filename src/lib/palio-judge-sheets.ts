@@ -310,6 +310,7 @@ const SUMMARY_MARGIN = 8;
 const SUMMARY_TABLE_WIDTH = PAGE_WIDTH - SUMMARY_MARGIN * 2;
 const SUMMARY_NAME_WIDTH = 36;
 const SUMMARY_PREF_WIDTH = 22;
+const SUMMARY_COUNT_WIDTH = 22;
 const SUMMARY_FIRST_TOP = 60;
 const SUMMARY_NEXT_TOP = 18;
 const SUMMARY_BOTTOM = PAGE_HEIGHT - 10;
@@ -323,6 +324,9 @@ interface SummaryEntry {
 interface SummaryJudge {
   cells: Map<string, SummaryEntry[]>;
   against: number;
+  extra: number;
+  principalGiudice: number;
+  principalCronometrista: number;
   name: string;
   preferredRole: 'cronometrista' | 'giudice' | null;
 }
@@ -340,7 +344,7 @@ function buildJudgeSummary(input: JudgeSheetsInput, games: PalioGame[]): { colum
     const key = id ?? name;
     let judge = judges.get(key);
     if (!judge) {
-      judge = { against: 0, cells: new Map(), name, preferredRole };
+      judge = { against: 0, cells: new Map(), extra: 0, name, preferredRole, principalCronometrista: 0, principalGiudice: 0 };
       judges.set(key, judge);
     }
     return judge;
@@ -365,6 +369,9 @@ function buildJudgeSummary(input: JudgeSheetsInput, games: PalioGame[]): { colum
       else if (a.lane !== null && a.game !== 'melocotogno') parts.push(`C${a.lane}`);
       parts.push(a.role === 'cronometrista' ? 'Tempi' : 'Penal.');
       const against = isAgainstPreference(judge.preferredRole, a.role, a.game);
+      if (a.isExtra) judge.extra += 1;
+      else if (a.role === 'cronometrista') judge.principalCronometrista += 1;
+      else judge.principalGiudice += 1;
       addEntry(judge, a.game, { against, text: parts.join(' ') + (against ? ' !' : '') });
       usedColumns.add(a.game);
     });
@@ -388,13 +395,13 @@ function drawJudgeSummaryPages(doc: PdfDoc, input: JudgeSheetsInput, games: Pali
   const { columns, judges } = buildJudgeSummary(input, games);
   if (judges.length === 0) return;
   const headerLines = getEditionHeader(input);
-  const cellWidth = (SUMMARY_TABLE_WIDTH - SUMMARY_NAME_WIDTH - SUMMARY_PREF_WIDTH) / Math.max(columns.length, 1);
+  const cellWidth = (SUMMARY_TABLE_WIDTH - SUMMARY_NAME_WIDTH - SUMMARY_PREF_WIDTH - SUMMARY_COUNT_WIDTH) / Math.max(columns.length, 1);
 
   const metrics = (fontSize: number) => {
     const lineHeight = fontSize * 0.42;
     const rowPadding = fontSize * 0.3;
     const rowHeights = judges.map((judge) => {
-      const lines = Math.max(1, ...Array.from(judge.cells.values()).map((entries) => entries.length), judge.against > 0 ? 2 : 1);
+      const lines = Math.max(1, ...Array.from(judge.cells.values()).map((entries) => entries.length), judge.against > 0 ? 2 : 1, 3);
       return lines * lineHeight + rowPadding;
     });
     return { lineHeight, rowHeights, rowPadding };
@@ -425,6 +432,7 @@ function drawJudgeSummaryPages(doc: PdfDoc, input: JudgeSheetsInput, games: Pali
     const heads = [
       { title: 'Giudice', width: SUMMARY_NAME_WIDTH },
       { title: 'Preferenza', width: SUMMARY_PREF_WIDTH },
+      { title: 'Incarichi', width: SUMMARY_COUNT_WIDTH },
       ...columns.map((column) => ({ title: column.title, width: cellWidth })),
     ];
     let x = SUMMARY_MARGIN;
@@ -444,7 +452,7 @@ function drawJudgeSummaryPages(doc: PdfDoc, input: JudgeSheetsInput, games: Pali
   doc.text('Riepilogo giudici', PAGE_WIDTH / 2, 44, { align: 'center' });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
-  doc.text('B = batteria · C = corsia · Tempi = cronometrista · Penal. = giudice penalità · extra = di riserva', PAGE_WIDTH / 2, 50.5, { align: 'center' });
+  doc.text('B = batteria · C = corsia · Tempi = cronometrista · Penal. = giudice penalità · extra = di riserva · Incarichi = n. volte titolare/extra', PAGE_WIDTH / 2, 50.5, { align: 'center' });
   doc.setTextColor(197, 40, 15);
   doc.setFont('helvetica', 'bold');
   doc.text('In rosso con ! : incarico contro la preferenza del giudice', PAGE_WIDTH / 2, 55.5, { align: 'center' });
@@ -469,8 +477,9 @@ function drawJudgeSummaryPages(doc: PdfDoc, input: JudgeSheetsInput, games: Pali
     doc.rect(SUMMARY_MARGIN, y, SUMMARY_NAME_WIDTH, height, 'FD');
     doc.setFillColor(shade, shade, shade);
     doc.rect(SUMMARY_MARGIN + SUMMARY_NAME_WIDTH, y, SUMMARY_PREF_WIDTH, height, 'FD');
+    doc.rect(SUMMARY_MARGIN + SUMMARY_NAME_WIDTH + SUMMARY_PREF_WIDTH, y, SUMMARY_COUNT_WIDTH, height, 'FD');
     columns.forEach((_, columnIndex) => {
-      doc.rect(SUMMARY_MARGIN + SUMMARY_NAME_WIDTH + SUMMARY_PREF_WIDTH + columnIndex * cellWidth, y, cellWidth, height, 'FD');
+      doc.rect(SUMMARY_MARGIN + SUMMARY_NAME_WIDTH + SUMMARY_PREF_WIDTH + SUMMARY_COUNT_WIDTH + columnIndex * cellWidth, y, cellWidth, height, 'FD');
     });
 
     const baseline = y + rowPadding / 2 + lineHeight * 0.8;
@@ -489,8 +498,16 @@ function drawJudgeSummaryPages(doc: PdfDoc, input: JudgeSheetsInput, games: Pali
       doc.setTextColor(0, 0, 0);
     }
 
+    const countX = prefX + SUMMARY_PREF_WIDTH;
+    doc.setFont('helvetica', 'normal');
+    [
+      `Crono: ${judge.principalCronometrista}`,
+      `Giudice: ${judge.principalGiudice}`,
+      `Extra: ${judge.extra}`,
+    ].forEach((line, lineIndex) => doc.text(line, countX, baseline + lineIndex * lineHeight));
+
     columns.forEach((column, columnIndex) => {
-      const cellX = SUMMARY_MARGIN + SUMMARY_NAME_WIDTH + SUMMARY_PREF_WIDTH + columnIndex * cellWidth + 1.5;
+      const cellX = SUMMARY_MARGIN + SUMMARY_NAME_WIDTH + SUMMARY_PREF_WIDTH + SUMMARY_COUNT_WIDTH + columnIndex * cellWidth + 1.5;
       (judge.cells.get(column.key) ?? []).forEach((entry, entryIndex) => {
         doc.setFont('helvetica', entry.against ? 'bold' : 'normal');
         doc.setTextColor(entry.against ? 197 : 0, entry.against ? 40 : 0, entry.against ? 15 : 0);
