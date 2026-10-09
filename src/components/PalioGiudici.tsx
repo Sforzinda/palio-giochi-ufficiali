@@ -926,6 +926,40 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
 
       <div className="rounded-lg border border-stone-800 bg-stone-900 p-4">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-stone-300">Abbinamenti per batteria</h2>
+        <details className="mt-2 rounded-md border border-stone-800 bg-stone-950 text-xs text-stone-300">
+          <summary className="cursor-pointer px-3 py-2 font-semibold text-stone-200">Come funziona l&apos;abbinamento automatico</summary>
+          <div className="space-y-2 border-t border-stone-800 p-3">
+            <p>
+              L&apos;abbinamento automatico rispetta questi criteri, dal più importante al meno importante:
+            </p>
+            <ol className="list-inside list-decimal space-y-1">
+              <li>
+                <span className="font-semibold">Vincoli</span>: un giudice non sta nella corsia dove gareggia una sua Contrada,
+                non è in due posti della stessa batteria e le figure fisse non vengono toccate.
+              </li>
+              <li><span className="font-semibold">Posti coperti</span>: si riempie il maggior numero di posti possibile.</li>
+              <li>
+                <span className="font-semibold">Equità sui giudici principali</span>: tutti devono fare il giudice
+                principale (cronometrista o giudice penalità) un numero di volte il più possibile uguale. Gli extra e il
+                melocotogno non contano.
+              </li>
+              <li><span className="font-semibold">Preferenza di ruolo</span>: si rispetta se cronometrista o giudice.</li>
+              <li>
+                <span className="font-semibold">Equità sulle preferenze</span>: chi ha già dovuto fare il ruolo che non
+                preferisce viene evitato per i posti successivi.
+              </li>
+              <li>
+                <span className="font-semibold">Carico complessivo</span>: si distribuiscono equamente anche gli incarichi
+                totali, extra compresi.
+              </li>
+              <li><span className="font-semibold">Corsia abituale</span>: a parità, il giudice resta sulla corsia che occupa più spesso.</li>
+            </ol>
+            <p>
+              I giudici senza un posto da principale in una batteria diventano extra (un cronometrista e un giudice per
+              batteria prima di tutto). Se avanzano giudici liberi, uno può fare il giudice della gonna.
+            </p>
+          </div>
+        </details>
         {!edition ? (
           <p className="mt-2 text-sm text-stone-400">
             Seleziona (o crea) un&apos;edizione in alto per abbinare i giudici alle batterie.
