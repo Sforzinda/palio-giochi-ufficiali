@@ -938,21 +938,21 @@ export function PalioGiudici({ availableGames, contrade, edition, heats }: Palio
                 non è in due posti della stessa batteria e le figure fisse non vengono toccate.
               </li>
               <li><span className="font-semibold">Posti coperti</span>: si riempie il maggior numero di posti possibile.</li>
+              <li><span className="font-semibold">Preferenza di ruolo</span>: si rispetta se cronometrista o giudice.</li>
               <li>
                 <span className="font-semibold">Equità sui giudici principali</span>: tutti devono fare il giudice
                 principale (cronometrista o giudice penalità) un numero di volte il più possibile uguale. Gli extra e il
                 melocotogno non contano.
               </li>
-              <li><span className="font-semibold">Preferenza di ruolo</span>: si rispetta se cronometrista o giudice.</li>
               <li>
                 <span className="font-semibold">Equità sulle preferenze</span>: chi ha già dovuto fare il ruolo che non
                 preferisce viene evitato per i posti successivi.
               </li>
+              <li><span className="font-semibold">Corsia abituale</span>: a parità, il giudice resta sulla corsia che occupa più spesso.</li>
               <li>
                 <span className="font-semibold">Carico complessivo</span>: si distribuiscono equamente anche gli incarichi
                 totali, extra compresi.
               </li>
-              <li><span className="font-semibold">Corsia abituale</span>: a parità, il giudice resta sulla corsia che occupa più spesso.</li>
             </ol>
             <p>
               I giudici senza un posto da principale in una batteria diventano extra (un cronometrista e un giudice per

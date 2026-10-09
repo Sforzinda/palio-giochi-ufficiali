@@ -147,15 +147,15 @@ export function getUsualLane(records: LaneRecord[], judgeId: string, game: Palio
 
 export const UNAVAILABLE_COST = 1e10;
 
-// Costi: l'equità nel numero di volte come giudice principale (titolare) pesa
-// più di tutto, poi la preferenza per il ruolo, poi l'equità sulle preferenze
-// disattese, poi il carico complessivo e infine la corsia abituale. UNAVAILABLE_COST è molto più grande di qualunque
+// Costi, in ordine di priorità: la preferenza per il ruolo, poi l'equità nel
+// numero di volte come giudice principale (titolare), poi l'equità sulle
+// preferenze disattese, poi la corsia abituale e infine il carico complessivo. UNAVAILABLE_COST è molto più grande di qualunque
 // somma di costi reali: si riempie prima il maggior numero di posti possibile.
-const TITOLARE_COST = 250000;
-const PREFERENCE_COST = 100000;
-const FAIRNESS_COST = 20000;
-const LOAD_COST = 2500;
+const PREFERENCE_COST = 1000000;
+const TITOLARE_COST = 100000;
+const FAIRNESS_COST = 10000;
 const LANE_COST = 1000;
+const LOAD_COST = 100;
 const OFF_LANE_OBJECTIVE = 1000;
 const MAX_REFINEMENT_PASSES = 6;
 
@@ -226,9 +226,9 @@ export function solveAssignment(cost: number[][]): number[] {
  *  2. rifinitura su tutte le batterie insieme: ogni batteria viene ricalcolata
  *     sapendo cosa succede nelle altre (corsia abituale, equità), finché la
  *     soluzione non migliora più.
- * Ordine di priorità: posti coperti, equità nel numero di volte come giudice
- * principale, preferenza per il ruolo, equità sulle preferenze disattese,
- * corsia abituale, carico.
+ * Ordine di priorità: posti coperti, preferenza per il ruolo, equità nel numero
+ * di volte come giudice principale, equità sulle preferenze disattese, corsia
+ * abituale, carico.
  */
 export function computeTitolari(input: ProposalInput): { missing: MissingSlot[]; rows: ProposalRow[] } {
   const { assignments, fixedJudgeIds, heats, judges } = input;
@@ -300,9 +300,9 @@ export function computeTitolari(input: ProposalInput): { missing: MissingSlot[];
       const laneRank = usual === null ? 1 : usual === lane ? 0 : 2;
       const preference = preferenceRank(judge, role);
       const fairness = preference === 2 && countsForFairness(game) ? mismatchesOf(judge.id, game, heatNumber) * FAIRNESS_COST : 0;
-      const equity = countsForFairness(game) ? Math.min(titolari[index] - minTitolari, 20) * TITOLARE_COST : 0;
+      const equity = countsForFairness(game) ? Math.min(titolari[index] - minTitolari, 9) * TITOLARE_COST : 0;
       return equity + preference * PREFERENCE_COST + fairness + laneRank * LANE_COST
-        + Math.min(loads[index] - minLoad, 20) * LOAD_COST + index / 1000;
+        + Math.min(loads[index] - minLoad, 9) * LOAD_COST + index / 1000;
     }));
     const matching = solveAssignment(cost);
     slots.forEach(({ lane, role }, slotIndex) => {
