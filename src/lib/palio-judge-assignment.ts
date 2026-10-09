@@ -145,16 +145,18 @@ export function getUsualLane(records: LaneRecord[], judgeId: string, game: Palio
 // ---------------------------------------------------------------------------
 // Assegnazione a costo minimo
 
-export const UNAVAILABLE_COST = 1e7;
+export const UNAVAILABLE_COST = 1e10;
 
-// Costi: la preferenza pesa più di tutto, poi l'equità tra giudici, poi la
-// corsia e infine il carico. UNAVAILABLE_COST è molto più grande di qualunque
+// Costi: l'equità nel numero di volte come giudice principale (titolare) pesa
+// più di tutto, poi la preferenza per il ruolo, poi l'equità sulle preferenze
+// disattese, poi il carico complessivo e infine la corsia abituale. UNAVAILABLE_COST è molto più grande di qualunque
 // somma di costi reali: si riempie prima il maggior numero di posti possibile.
+const TITOLARE_COST = 250000;
 const PREFERENCE_COST = 100000;
 const FAIRNESS_COST = 20000;
+const LOAD_COST = 2500;
 const LANE_COST = 1000;
-const LOAD_COST = 10;
-const OFF_LANE_OBJECTIVE = 5000;
+const OFF_LANE_OBJECTIVE = 1000;
 const MAX_REFINEMENT_PASSES = 6;
 
 // Algoritmo ungherese: posti (righe) contro giudici (colonne).
@@ -224,8 +226,9 @@ export function solveAssignment(cost: number[][]): number[] {
  *  2. rifinitura su tutte le batterie insieme: ogni batteria viene ricalcolata
  *     sapendo cosa succede nelle altre (corsia abituale, equità), finché la
  *     soluzione non migliora più.
- * Ordine di priorità: posti coperti, preferenza per il ruolo, equità (chi è già
- * stato assegnato contro la preferenza va evitato), corsia abituale, carico.
+ * Ordine di priorità: posti coperti, equità nel numero di volte come giudice
+ * principale, preferenza per il ruolo, equità sulle preferenze disattese,
+ * corsia abituale, carico.
  */
 export function computeTitolari(input: ProposalInput): { missing: MissingSlot[]; rows: ProposalRow[] } {
   const { assignments, fixedJudgeIds, heats, judges } = input;
@@ -244,6 +247,12 @@ export function computeTitolari(input: ProposalInput): { missing: MissingSlot[];
     const judge = judgeById.get(judgeId);
     return judge && countsForFairness(game) && preferenceRank(judge, role) === 2 ? 1 : 0;
   };
+
+  // Quante volte un giudice è principale (titolare), fuori dalla batteria che
+  // si sta ricalcolando. Il melocotogno non conta.
+  const titolariOf = (judgeId: string, game: PalioGame, heatNumber: number) =>
+    assignments.filter((a) => a.judge_id === judgeId && !a.is_extra && a.lane !== null && countsForFairness(a.game)).length
+    + rows.filter((r) => r.judgeId === judgeId && countsForFairness(r.game) && !(r.game === game && r.heatNumber === heatNumber)).length;
 
   // Metriche di un giudice "fuori" dalla batteria che si sta ricalcolando.
   const loadOf = (judgeId: string, game: PalioGame, heatNumber: number) =>
@@ -279,6 +288,10 @@ export function computeTitolari(input: ProposalInput): { missing: MissingSlot[];
       assignments.filter((a) => a.game === game && (a.heat_number === heatNumber || a.heat_number === null)).map((a) => a.judge_id)
     );
     const records = laneRecords();
+    const titolari = judges.map((judge) => titolariOf(judge.id, game, heatNumber));
+    const minTitolari = Math.min(...titolari);
+    const loads = judges.map((judge) => loadOf(judge.id, game, heatNumber));
+    const minLoad = Math.min(...loads);
     const cost = slots.map(({ lane, role }) => judges.map((judge, index) => {
       if (taken.has(judge.id) || fixedJudgeIds.has(judge.id) || hasLaneConflict(heats, judge, game, heatNumber, lane)) {
         return UNAVAILABLE_COST;
@@ -287,8 +300,9 @@ export function computeTitolari(input: ProposalInput): { missing: MissingSlot[];
       const laneRank = usual === null ? 1 : usual === lane ? 0 : 2;
       const preference = preferenceRank(judge, role);
       const fairness = preference === 2 && countsForFairness(game) ? mismatchesOf(judge.id, game, heatNumber) * FAIRNESS_COST : 0;
-      return preference * PREFERENCE_COST + fairness + laneRank * LANE_COST
-        + Math.min(loadOf(judge.id, game, heatNumber), 99) * LOAD_COST + index / 1000;
+      const equity = countsForFairness(game) ? Math.min(titolari[index] - minTitolari, 20) * TITOLARE_COST : 0;
+      return equity + preference * PREFERENCE_COST + fairness + laneRank * LANE_COST
+        + Math.min(loads[index] - minLoad, 20) * LOAD_COST + index / 1000;
     }));
     const matching = solveAssignment(cost);
     slots.forEach(({ lane, role }, slotIndex) => {
@@ -303,7 +317,12 @@ export function computeTitolari(input: ProposalInput): { missing: MissingSlot[];
   const objective = (game: PalioGame, heatNumbers: number[]) => {
     const gameRows = rows.filter((r) => r.game === game);
     const totalSlots = heatNumbers.reduce((sum, h) => sum + emptySlots(game, h).length, 0);
-    let value = (totalSlots - gameRows.length) * 1e9;
+    let value = (totalSlots - gameRows.length) * 1e12;
+    // Equità globale: somma dei quadrati dei titolari per giudice (include gli altri giochi).
+    judges.forEach((judge) => {
+      const total = titolariOf(judge.id, game, -1);
+      value += total * total * TITOLARE_COST;
+    });
     const perJudge = new Map<string, ProposalRow[]>();
     gameRows.forEach((r) => perJudge.set(r.judgeId, [...(perJudge.get(r.judgeId) ?? []), r]));
     perJudge.forEach((judgeRows, judgeId) => {
