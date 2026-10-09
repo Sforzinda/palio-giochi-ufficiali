@@ -1607,7 +1607,7 @@ function PalioResultsInputContent() {
                 <select
                   value={selectedLiveControl?.heats_focus_game ?? ''}
                   onChange={(e) => handleSetFocusGame('heats_focus_game', (e.target.value || null) as PalioGame | null)}
-                  disabled={!selectedEditionId || savingLiveField === 'heats_focus_game' || !(selectedLiveControl?.show_heats ?? false)}
+                  disabled={!selectedEditionId || savingLiveField === 'heats_focus_game'}
                   className="rounded-md border border-stone-700 bg-stone-950 px-3 py-1.5 text-sm font-medium normal-case text-stone-200 disabled:opacity-50"
                 >
                   <option value="">Tutte le batterie</option>
@@ -1621,7 +1621,7 @@ function PalioResultsInputContent() {
                 <select
                   value={selectedLiveControl?.games_focus_game ?? ''}
                   onChange={(e) => handleSetFocusGame('games_focus_game', (e.target.value || null) as PalioGame | null)}
-                  disabled={!selectedEditionId || savingLiveField === 'games_focus_game' || !(selectedLiveControl?.show_games ?? true)}
+                  disabled={!selectedEditionId || savingLiveField === 'games_focus_game'}
                   className="rounded-md border border-stone-700 bg-stone-950 px-3 py-1.5 text-sm font-medium normal-case text-stone-200 disabled:opacity-50"
                 >
                   <option value="">Tutti i risultati</option>
