@@ -268,7 +268,7 @@ export const auspiciCartaLabels: Record<'duca' | 'duchessa' | 'armato' | 'fornai
 // N, N-1, ..., 1 sul numero effettivo di partecipanti dell'edizione (non
 // fisso a 12, per via delle eventuali squadre extra dell'evento).
 export const getAuspiciPoints = (position: number | null, totalParticipants: number): number | null =>
-  position === null ? null : totalParticipants + 1 - position;
+  position === null ? null : Math.max(1, totalParticipants + 1 - position);
 
 const rankAuspiciValues = (
   items: { participant_id: string; value: number | null }[],

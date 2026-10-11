@@ -206,7 +206,7 @@ function calculatePalioRowsUnchecked(
 
     return effectiveRows.map((row) => {
       const position = ranks.get(row.contrada_id) ?? null;
-      const points = position === null ? null : 13 - position;
+      const points = position === null ? null : Math.max(1, 13 - position);
       const total = totals.find((item) => item.contrada_id === row.contrada_id)?.value ?? null;
 
       return applyPalioCalculationOverride(row, {
@@ -262,7 +262,7 @@ function calculatePalioRowsUnchecked(
   return effectiveRows.map((row) => {
     const adjustedTime = adjustedTimes.find((item) => item.contrada_id === row.contrada_id)?.value ?? null;
     const position = ranks.get(row.contrada_id) ?? null;
-    const points = position === null ? null : 13 - position;
+    const points = position === null ? null : Math.max(1, 13 - position);
 
     return applyPalioCalculationOverride(row, {
       ...row,

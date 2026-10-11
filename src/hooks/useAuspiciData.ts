@@ -94,7 +94,7 @@ function buildAuspiciRanking(
     item.provaResults[result.prova] = result;
 
     if (result.position !== null) {
-      item.totalPoints += totalParticipants + 1 - result.position;
+      item.totalPoints += Math.max(1, totalParticipants + 1 - result.position);
       if (result.position === 1) item.wins += 1;
       if (result.prova === 'giuramento') item.giuramentoPosition = result.position;
     }
