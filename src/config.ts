@@ -2,6 +2,22 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
 let supabaseClient: SupabaseClient | null = null
 
+export interface PalioDelegatedSession {
+  label: string
+  expiresAt: string
+}
+
+export interface PalioDelegatedAuth {
+  getSession(): Promise<PalioDelegatedSession | null>
+  signOut(): Promise<void>
+}
+
+let delegatedAuth: PalioDelegatedAuth | undefined
+
+export function getPalioDelegatedAuth(): PalioDelegatedAuth | undefined {
+  return delegatedAuth
+}
+
 /**
  * Inizializza il client Supabase condiviso da tutte le viste di questo package.
  * Va chiamata una sola volta, all'avvio dell'app consumatrice (fantapalio o il
@@ -11,8 +27,13 @@ let supabaseClient: SupabaseClient | null = null
 export function initPalioGiochiUfficiali(options: {
   supabaseUrl: string
   supabaseAnonKey: string
+  fetch?: typeof fetch
+  delegatedAuth?: PalioDelegatedAuth
 }): void {
-  supabaseClient = createClient(options.supabaseUrl, options.supabaseAnonKey)
+  delegatedAuth = options.delegatedAuth
+  supabaseClient = createClient(options.supabaseUrl, options.supabaseAnonKey, {
+    global: options.fetch ? { fetch: options.fetch } : undefined,
+  })
 }
 
 export function getSupabaseClient(): SupabaseClient {

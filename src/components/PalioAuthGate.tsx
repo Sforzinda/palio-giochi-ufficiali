@@ -1,6 +1,6 @@
 import { type FormEvent, type ReactNode, useState } from 'react';
 import { LogIn, LogOut, ShieldAlert } from 'lucide-react';
-import { getSupabaseClient } from '../config';
+import { getPalioDelegatedAuth, getSupabaseClient } from '../config';
 import { usePalioAuth } from '../hooks/usePalioAuth';
 
 /**
@@ -10,7 +10,7 @@ import { usePalioAuth } from '../hooks/usePalioAuth';
  */
 export function PalioAuthGate({ children }: { children: ReactNode }) {
   const supabase = getSupabaseClient();
-  const { email, status } = usePalioAuth();
+  const { email, status, delegatedSession } = usePalioAuth();
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -35,6 +35,10 @@ export function PalioAuthGate({ children }: { children: ReactNode }) {
   }
 
   async function handleLogout() {
+    if (delegatedSession) {
+      await getPalioDelegatedAuth()?.signOut();
+      return;
+    }
     await supabase.auth.signOut();
   }
 
@@ -50,7 +54,7 @@ export function PalioAuthGate({ children }: { children: ReactNode }) {
     return (
       <div>
         <div className="flex items-center justify-between gap-3 border-b border-stone-800 bg-stone-950 px-4 py-2 text-sm text-stone-400">
-          <span className="truncate">Accesso come {email}</span>
+          <span className="truncate">Accesso come {delegatedSession?.label ?? email}</span>
           <button
             type="button"
             onClick={handleLogout}

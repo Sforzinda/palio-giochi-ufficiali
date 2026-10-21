@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { getSupabaseClient } from '../config';
+import { getPalioDelegatedAuth, getSupabaseClient, type PalioDelegatedSession } from '../config';
 
 export type PalioAuthStatus = 'loading' | 'signed-out' | 'forbidden' | 'authorized';
 
@@ -9,6 +9,7 @@ export interface PalioAuthState {
   isAdmin: boolean;
   session: Session | null;
   status: PalioAuthStatus;
+  delegatedSession: PalioDelegatedSession | null;
 }
 
 /**
@@ -25,11 +26,22 @@ export function usePalioAuth(): PalioAuthState {
   const [session, setSession] = useState<Session | null>(null);
   const [status, setStatus] = useState<PalioAuthStatus>('loading');
   const [isAdmin, setIsAdmin] = useState(false);
+  const [delegatedSession, setDelegatedSession] = useState<PalioDelegatedSession | null>(null);
 
   useEffect(() => {
     let isMounted = true;
+    let revision = 0;
 
     async function checkAuthorization(nextSession: Session | null) {
+      const currentRevision = ++revision;
+      const delegated = await getPalioDelegatedAuth()?.getSession().catch(() => null);
+      if (!isMounted || currentRevision !== revision) return;
+      setDelegatedSession(delegated ?? null);
+      if (delegated && Date.parse(delegated.expiresAt) > Date.now()) {
+        setStatus('authorized');
+        setIsAdmin(false);
+        return;
+      }
       if (!nextSession) {
         if (isMounted) {
           setStatus('signed-out');
@@ -39,7 +51,7 @@ export function usePalioAuth(): PalioAuthState {
       }
 
       const { data, error } = await supabase.rpc('can_manage_palio_games');
-      if (!isMounted) return;
+      if (!isMounted || currentRevision !== revision) return;
 
       if (error) {
         console.error('Error checking can_manage_palio_games:', error);
@@ -56,7 +68,7 @@ export function usePalioAuth(): PalioAuthState {
           .select('is_admin')
           .eq('id', nextSession.user.id)
           .maybeSingle();
-        if (!isMounted) return;
+        if (!isMounted || currentRevision !== revision) return;
         if (userError) {
           console.error('Error fetching user role:', userError);
           setIsAdmin(false);
@@ -79,9 +91,14 @@ export function usePalioAuth(): PalioAuthState {
       checkAuthorization(nextSession);
     });
 
+    const timer = getPalioDelegatedAuth() ? window.setInterval(() => {
+      supabase.auth.getSession().then(({ data }) => checkAuthorization(data.session));
+    }, 30_000) : undefined;
+
     return () => {
       isMounted = false;
       subscription.subscription.unsubscribe();
+      window.clearInterval(timer);
     };
   }, [supabase]);
 
@@ -90,5 +107,6 @@ export function usePalioAuth(): PalioAuthState {
     isAdmin,
     session,
     status,
+    delegatedSession,
   };
 }

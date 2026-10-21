@@ -67,29 +67,22 @@ ufficiali pubblici (vedi discussione issue #97).
 
 ## Accesso Direttivo del sito Giochi
 
-La predisposizione SSO appartiene al repository consumatore
-[`palio-giochi-sito`](https://github.com/Sforzinda/palio-giochi-sito), che contiene
-il Worker Cloudflare configurato per il sito. L'adattatore disabilitato, il pulsante,
-il routing e i test sono mantenuti lì; questo package conserva il login
-ordinario e i permessi preesistenti di amministratori, giudici e responsabili.
-Non contiene endpoint broker, deleghe o conversioni di sessioni Supabase.
+Il flusso SSO e le verifiche del broker appartengono al repository consumatore
+[`palio-giochi-sito`](https://github.com/Sforzinda/palio-giochi-sito), nel Worker
+Cloudflare del sito. Questo package mantiene il login ordinario e i permessi
+preesistenti sotto RLS.
 
-Il broker Direttivo 1.0.1 risulta pubblicato; il sito mantiene il nuovo accesso
-disabilitato e il codice non è ancora pubblicato. La futura autorizzazione delegata
-richiede identità Supabase Auth verificata in CassaPalio
-(`hpxhnhdzoiflfdruvsiv`), `public.profiles.role = 'admin'` **e** appartenenza
-attiva in `public.direttivo_members`, collegate per UUID. Un admin cassa senza
-appartenenza attiva va negato. Ogni azione delegata richiede introspezione
-backend con sessione centrale attiva, audience e scadenza valide, appartenenza
-e ruolo correnti e `director_role` aggiornato. Gli incarichi non implicano
-una gerarchia o permessi aggiuntivi locali.
+Il consumatore può passare `delegatedAuth` (`getSession`, `signOut`) e `fetch`
+a `initPalioGiochiUfficiali`: il gate mostra il contesto temporaneo verificato
+e i widget usano il trasporto server del servizio. Non si crea una sessione
+Supabase e `isAdmin` resta falso: gestione utenti e password sono escluse.
+Senza adattatore il comportamento ordinario resta invariato.
 
-Il package riceve URL e chiave pubblica del database dall'app consumatrice:
-il project ref effettivo del deploy deve essere verificato nel sito. I widget
-attuali effettuano scritture dal browser sotto RLS e non possono essere
-sbloccati con una semplice delega o con ruoli provenienti dal browser.
-Vedere il README del sito per configurazione proposta, vincoli e verifiche
-obbligatorie prima dell'attivazione. Nessun SSO è dichiarato operativo.
+L'adattatore UI non autorizza i dati: il backend deve validare ogni comando
+e ripetere l'introspezione prima di eseguirlo. La condizione centrale è sessione
+CassaPalio attiva, `profiles.role='admin'` e `direttivo_members.active=true`
+per lo stesso UUID. Gli incarichi non implicano gerarchie o ruoli permanenti.
+Vedere il README del sito per configurazione, comandi e prove eseguite.
 
 ## Record dei giochi
 

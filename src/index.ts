@@ -1,4 +1,5 @@
 export { initPalioGiochiUfficiali, getSupabaseClient } from './config'
+export type { PalioDelegatedAuth, PalioDelegatedSession } from './config'
 
 export {
   usePalioLiveData,
