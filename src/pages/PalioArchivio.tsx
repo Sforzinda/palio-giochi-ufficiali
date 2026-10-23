@@ -99,14 +99,14 @@ export function PalioArchivio() {
                                 const name = contradaName(result.contrada_id);
                                 const stemma = getContradaStemma(name);
                                 return (
-                                  <li key={result.contrada_id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md bg-stone-800/60 px-3 py-1.5 sm:grid-cols-[6rem_minmax(0,1fr)_7rem_3rem]">
+                                  <li key={result.contrada_id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 rounded-md bg-stone-800/60 px-3 py-1.5 sm:grid-cols-[6rem_minmax(0,1fr)_7rem_3rem]">
                                     <span className="hidden text-sm text-stone-400 sm:block">{getResultPositionLabel(result)}</span>
                                     <span className="flex min-w-0 items-center gap-2 font-semibold">
                                       {stemma && <img src={stemma} alt="" className="h-5 w-5 shrink-0 rounded-full object-cover" />}
                                       <span className="truncate">{name}</span>
                                     </span>
-                                    <span className="hidden text-right text-sm text-stone-300 sm:block">{getResultValue(result)}</span>
-                                    <span className="text-right font-black">
+                                    <span className="col-start-1 row-start-2 text-sm text-stone-300 sm:col-start-auto sm:row-start-auto sm:text-right">{getResultValue(result)}</span>
+                                    <span className="col-start-2 row-span-2 row-start-1 text-right font-black sm:col-start-auto sm:row-span-1 sm:row-start-auto">
                                       {game === 'finale' ? '' : `${formatNumber(result.points)} pt`}
                                       {game === 'finale' && <span className="text-sm font-semibold text-stone-300">{result.position ? `${result.position}°` : ''}</span>}
                                     </span>
