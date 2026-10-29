@@ -24,6 +24,9 @@ interface ResultRow {
   contrada_id: string;
   game: PalioGame;
   is_disqualified: boolean | null;
+  melocotogno_10_count: number | null;
+  melocotogno_2_count: number | null;
+  melocotogno_5_count: number | null;
   points: number | string | null;
   position: number | null;
 }
@@ -79,7 +82,7 @@ export function PalioClassifiche({ contrade, edition }: PalioClassificheProps) {
     setLoading(true);
     const { data, error } = await supabase
       .from('palio_edition_results')
-      .select('contrada_id, game, points, position, adjusted_time_seconds, is_disqualified')
+      .select('contrada_id, game, points, position, adjusted_time_seconds, is_disqualified, melocotogno_2_count, melocotogno_5_count, melocotogno_10_count')
       .eq('edition_id', editionId);
     if (error) console.error('Error fetching palio classifiche:', error);
     setResults(error ? [] : ((data as ResultRow[]) ?? []));
@@ -100,11 +103,16 @@ export function PalioClassifiche({ contrade, edition }: PalioClassificheProps) {
       );
       const items: RankedItem[] = contrade.map((contrada) => {
         const result = resultByContrada.get(contrada.id);
+        const melocotognoTotal = result
+          ? (result.melocotogno_2_count ?? 0) * 2 + (result.melocotogno_5_count ?? 0) * 5 + (result.melocotogno_10_count ?? 0) * 10
+          : 0;
         return {
           contradaId: contrada.id,
           detail: result?.is_disqualified
             ? 'N.A.'
-            : game !== 'finale' && result?.adjusted_time_seconds !== null && result?.adjusted_time_seconds !== undefined && result.adjusted_time_seconds !== ''
+            : game === 'melocotogno'
+              ? (melocotognoTotal > 0 ? `${formatNumber(melocotognoTotal)} raccolti` : '')
+              : game !== 'finale' && result?.adjusted_time_seconds !== null && result?.adjusted_time_seconds !== undefined && result.adjusted_time_seconds !== ''
               ? `${formatNumber(result.adjusted_time_seconds)} s`
               : '',
           name: contrada.name,
